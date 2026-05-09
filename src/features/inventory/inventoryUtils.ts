@@ -42,6 +42,15 @@ export function formatIngredientStock(ingredient: Ingredient) {
   )}`;
 }
 
+export type ProductSize = {
+  id: string;
+  productId: string;
+  productName?: string;
+  sizeName: string;
+  price: number;
+  isAvailable: boolean;
+};
+
 export function calculateStockFromPurchaseQuantity(
   purchaseQuantity: number,
   usagePerPurchaseUnit: number

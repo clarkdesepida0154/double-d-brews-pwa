@@ -3,9 +3,11 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
   getDocs,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
   where,
 } from "firebase/firestore";
@@ -31,6 +33,10 @@ const productCategories: ProductCategory[] = [
   "Other",
 ];
 
+function normalizeKey(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 function ProductsPanel() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -48,6 +54,33 @@ function ProductsPanel() {
   const [productSizes, setProductSizes] = useState<ProductSize[]>([]);
   const [isLoadingSizes, setIsLoadingSizes] = useState(false);
 
+  const [sizeStatusFilter, setSizeStatusFilter] = useState<"active" | "inactive">(
+    "active"
+  );
+
+  const [productSizeStats, setProductSizeStats] = useState<
+  Record<
+    string,
+    {
+      total: number;
+      ready: number;
+      needsRecipe: number;
+      unavailable: number;
+    }
+  >
+>({});
+
+  const [isEditProductModalOpen, setIsEditProductModalOpen] = useState(false);
+  const [editProductName, setEditProductName] = useState("");
+  const [editProductCategory, setEditProductCategory] =
+    useState<ProductCategory>("Milk Tea");
+  const [editProductAvailable, setEditProductAvailable] = useState(true);
+  const [isUpdatingProduct, setIsUpdatingProduct] = useState(false);
+
+  const [isDeactivateProductConfirmOpen, setIsDeactivateProductConfirmOpen] =
+  useState(false);
+  const [isDeactivatingProduct, setIsDeactivatingProduct] = useState(false);
+
   const [isSizeFormOpen, setIsSizeFormOpen] = useState(false);
   const [sizeName, setSizeName] = useState("");
   const [sizePrice, setSizePrice] = useState("");
@@ -55,6 +88,17 @@ function ProductsPanel() {
   const [isSavingSize, setIsSavingSize] = useState(false);
   const [selectedSize, setSelectedSize] = useState<ProductSize | null>(null);
   const [isRecipeFormOpen, setIsRecipeFormOpen] = useState(false);
+
+  const [editingSize, setEditingSize] = useState<ProductSize | null>(null);
+  const [editSizeName, setEditSizeName] = useState("");
+  const [editSizePrice, setEditSizePrice] = useState("");
+  const [editSizeAvailable, setEditSizeAvailable] = useState(true);
+  const [isUpdatingSize, setIsUpdatingSize] = useState(false);
+
+  const [sizeToDeactivate, setSizeToDeactivate] = useState<ProductSize | null>(
+    null
+  );
+  const [isDeactivatingSize, setIsDeactivatingSize] = useState(false);
 
   const [availableIngredients, setAvailableIngredients] = useState<Ingredient[]>([]);
   const [isLoadingRecipeIngredients, setIsLoadingRecipeIngredients] = useState(false);
@@ -77,71 +121,177 @@ function ProductsPanel() {
   }
 
   const loadProducts = useCallback(async () => {
-    setIsLoadingProducts(true);
+        setIsLoadingProducts(true);
+
+        try {
+            const productsQuery = query(
+            collection(db, "products"),
+            where("isActive", "==", productStatusFilter === "active")
+            );
+
+            const productsSnapshot = await getDocs(productsQuery);
+
+            const loadedProducts: Product[] = productsSnapshot.docs.map((docSnapshot) => {
+                const data = docSnapshot.data();
+
+                return {
+                    id: docSnapshot.id,
+                    name: data.name,
+                    category: data.category,
+                    isAvailable: data.isAvailable,
+                };
+            });
+
+            const productIds = new Set(loadedProducts.map((product) => product.id));
+
+            const recipesSnapshot = await getDocs(collection(db, "recipes"));
+
+const completedRecipeSizeIds = new Set(
+  recipesSnapshot.docs
+    .filter((recipeDoc) => {
+      const recipeData = recipeDoc.data();
+      return recipeData.isComplete === true && Array.isArray(recipeData.ingredients) && recipeData.ingredients.length > 0;
+    })
+    .map((recipeDoc) => recipeDoc.id)
+);
+
+const sizesSnapshot = await getDocs(collection(db, "productSizes"));
+
+const sizeStats = sizesSnapshot.docs.reduce<
+  Record<string, { total: number; ready: number; needsRecipe: number; unavailable: number }>
+>((stats, sizeDoc) => {
+  const sizeData = sizeDoc.data();
+  const productId = sizeData.productId;
+
+  if (!productIds.has(productId) || sizeData.isActive === false) {
+    return stats;
+  }
+
+  if (!stats[productId]) {
+    stats[productId] = {
+      total: 0,
+      ready: 0,
+      needsRecipe: 0,
+      unavailable: 0,
+    };
+  }
+
+  stats[productId].total += 1;
+
+  const hasCompleteRecipe = completedRecipeSizeIds.has(sizeDoc.id);
+
+  if (sizeData.isAvailable && hasCompleteRecipe) {
+    stats[productId].ready += 1;
+  } else if (!hasCompleteRecipe) {
+    stats[productId].needsRecipe += 1;
+  } else {
+    stats[productId].unavailable += 1;
+  }
+
+  return stats;
+}, {});
+
+            setProductSizeStats(sizeStats);
+
+            setProducts(loadedProducts.sort((a, b) => a.name.localeCompare(b.name)));
+        } catch (error) {
+            console.error(error);
+            setFormMessage("Failed to load products.");
+        } finally {
+            setIsLoadingProducts(false);
+        }
+    }, [productStatusFilter]);
+
+  const loadProductSizes = useCallback(
+  async (
+    productId: string,
+    statusFilter: "active" | "inactive" = sizeStatusFilter
+  ) => {
+    setIsLoadingSizes(true);
 
     try {
-      const productsQuery = query(
-        collection(db, "products"),
-        where("isActive", "==", productStatusFilter === "active")
+      const recipesSnapshot = await getDocs(collection(db, "recipes"));
+
+      const completedRecipeSizeIds = new Set(
+        recipesSnapshot.docs
+          .filter((recipeDoc) => {
+            const recipeData = recipeDoc.data();
+
+            return (
+              recipeData.isComplete === true &&
+              Array.isArray(recipeData.ingredients) &&
+              recipeData.ingredients.length > 0
+            );
+          })
+          .map((recipeDoc) => recipeDoc.id)
       );
 
-      const querySnapshot = await getDocs(productsQuery);
+      const sizesQuery = query(
+        collection(db, "productSizes"),
+        where("productId", "==", productId)
+      );
 
-      const loadedProducts: Product[] = querySnapshot.docs.map((docSnapshot) => {
+      const querySnapshot = await getDocs(sizesQuery);
+
+      const allSizes: ProductSize[] = querySnapshot.docs.map((docSnapshot) => {
         const data = docSnapshot.data();
 
         return {
           id: docSnapshot.id,
-          name: data.name,
-          category: data.category,
+          productId: data.productId,
+          productName: data.productName,
+          sizeName: data.sizeName,
+          price: data.price,
           isAvailable: data.isAvailable,
+          isActive: data.isActive ?? true,
+          hasCompleteRecipe: completedRecipeSizeIds.has(docSnapshot.id),
         };
       });
 
-      setProducts(
-        loadedProducts.sort((a, b) => a.name.localeCompare(b.name))
+      const activeSizeKeys = new Set(
+        allSizes
+          .filter((size) => size.isActive !== false)
+          .map((size) => normalizeKey(size.sizeName))
       );
+
+      const loadedSizes = allSizes.filter((size) => {
+        const sizeKey = normalizeKey(size.sizeName);
+
+        if (!size.sizeName || size.price <= 0) {
+          return false;
+        }
+
+        if (statusFilter === "active") {
+          return size.isActive !== false;
+        }
+
+        return size.isActive === false && !activeSizeKeys.has(sizeKey);
+      });
+
+      const uniqueSizes = loadedSizes.reduce<ProductSize[]>((uniqueList, size) => {
+        const sizeKey = normalizeKey(size.sizeName);
+
+        const alreadyExists = uniqueList.some(
+          (existingSize) => normalizeKey(existingSize.sizeName) === sizeKey
+        );
+
+        if (!alreadyExists) {
+          uniqueList.push(size);
+        }
+
+        return uniqueList;
+      }, []);
+
+      setProductSizes(uniqueSizes.sort((a, b) => a.price - b.price));
     } catch (error) {
       console.error(error);
-      setFormMessage("Failed to load products.");
+      setFormMessage("Failed to load product sizes.");
     } finally {
-      setIsLoadingProducts(false);
+      setIsLoadingSizes(false);
     }
-  }, [productStatusFilter]);
-
-  const loadProductSizes = useCallback(async (productId: string) => {
-    setIsLoadingSizes(true);
-
-    try {
-        const sizesQuery = query(
-        collection(db, "productSizes"),
-        where("productId", "==", productId)
-        );
-
-        const querySnapshot = await getDocs(sizesQuery);
-
-        const loadedSizes: ProductSize[] = querySnapshot.docs.map((docSnapshot) => {
-        const data = docSnapshot.data();
-
-        return {
-            id: docSnapshot.id,
-            productId: data.productId,
-            sizeName: data.sizeName,
-            price: data.price,
-            isAvailable: data.isAvailable,
-        };
-        });
-
-        setProductSizes(
-        loadedSizes.sort((a, b) => a.price - b.price)
-        );
-    } catch (error) {
-        console.error(error);
-        setFormMessage("Failed to load product sizes.");
-    } finally {
-        setIsLoadingSizes(false);
-    }
-    }, []);
+  },
+  [sizeStatusFilter]
+);
 
     const loadActiveIngredientsForRecipe = useCallback(async () => {
         setIsLoadingRecipeIngredients(true);
@@ -187,23 +337,18 @@ function ProductsPanel() {
         setIsLoadingRecipe(true);
 
         try {
-            const recipesQuery = query(
-            collection(db, "recipes"),
-            where("sizeId", "==", sizeId)
-            );
+            const recipeRef = doc(db, "recipes", sizeId);
+            const recipeSnapshot = await getDoc(recipeRef);
 
-            const querySnapshot = await getDocs(recipesQuery);
-
-            if (querySnapshot.empty) {
+            if (!recipeSnapshot.exists()) {
             setSavedRecipeId("");
             setRecipeIngredients([]);
             return;
             }
 
-            const recipeDoc = querySnapshot.docs[0];
-            const recipeData = recipeDoc.data();
+            const recipeData = recipeSnapshot.data();
 
-            setSavedRecipeId(recipeDoc.id);
+            setSavedRecipeId(recipeSnapshot.id);
             setRecipeIngredients(recipeData.ingredients || []);
         } catch (error) {
             console.error(error);
@@ -247,17 +392,98 @@ function ProductsPanel() {
   function resetSizeForm() {
     setSizeName("");
     setSizePrice("");
-    setIsSizeAvailable(true);
-    }
+    setIsSizeAvailable(false);
+  }
 
     async function openProductDetails(product: Product) {
-    setSelectedProduct(product);
-    setProductSizes([]);
-    setIsSizeFormOpen(false);
-    resetSizeForm();
-    setFormMessage("");
+        setSelectedProduct(product);
+        setProductSizes([]);
+        setIsSizeFormOpen(false);
+        setSizeStatusFilter("active");
+        resetSizeForm();
+        setFormMessage("");
 
-    await loadProductSizes(product.id);
+        await loadProductSizes(product.id, "active");
+    }
+
+    function openEditProductModal() {
+        if (!selectedProduct) {
+            return;
+        }
+
+        setEditProductName(selectedProduct.name);
+        setEditProductCategory(selectedProduct.category);
+        setEditProductAvailable(selectedProduct.isAvailable);
+        setFormMessage("");
+        setIsEditProductModalOpen(true);
+    }
+
+    async function handleUpdateProduct(event: React.FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+
+        if (!selectedProduct || isUpdatingProduct) {
+            return;
+        }
+
+        const trimmedName = editProductName.trim();
+        const nameKey = normalizeKey(trimmedName);
+
+        if (!trimmedName) {
+            setFormMessage("Product name is required.");
+            return;
+        }
+
+        setIsUpdatingProduct(true);
+        setFormMessage("Checking product...");
+
+        try {
+            const allProductsSnapshot = await getDocs(collection(db, "products"));
+
+            const duplicateProduct = allProductsSnapshot.docs.find((productDoc) => {
+            if (productDoc.id === selectedProduct.id) {
+                return false;
+            }
+
+            const productData = productDoc.data();
+
+            const existingNameKey =
+                productData.nameKey || normalizeKey(productData.name || "");
+
+            return existingNameKey === nameKey && productData.isActive !== false;
+            });
+
+            if (duplicateProduct) {
+            setFormMessage(`${trimmedName} already exists in your active products.`);
+            return;
+            }
+
+            setFormMessage("Saving changes...");
+
+            await updateDoc(doc(db, "products", selectedProduct.id), {
+            name: trimmedName,
+            nameKey,
+            category: editProductCategory,
+            isAvailable: editProductAvailable,
+            updatedAt: serverTimestamp(),
+            });
+
+            const updatedProduct = {
+            ...selectedProduct,
+            name: trimmedName,
+            category: editProductCategory,
+            isAvailable: editProductAvailable,
+            };
+
+            setSelectedProduct(updatedProduct);
+            setIsEditProductModalOpen(false);
+            showTemporaryMessage("Product updated successfully.");
+            await loadProducts();
+        } catch (error) {
+            console.error(error);
+            setFormMessage("Failed to update product. Please try again.");
+        } finally {
+            setIsUpdatingProduct(false);
+        }
     }
 
     function closeProductDetails() {
@@ -302,67 +528,108 @@ function ProductsPanel() {
   }
 
   async function handleAddProduct(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+        event.preventDefault();
 
-    const validationError = validateProductForm();
+        const validationError = validateProductForm();
 
-    if (validationError) {
-      setFormMessage(validationError);
-      return;
+        if (validationError) {
+            setFormMessage(validationError);
+            return;
+        }
+
+        const trimmedName = name.trim();
+        const nameKey = normalizeKey(trimmedName);
+
+        setIsSaving(true);
+        setFormMessage("Checking product...");
+
+        try {
+            const allProductsSnapshot = await getDocs(collection(db, "products"));
+
+            const matchingProducts = allProductsSnapshot.docs.filter((productDoc) => {
+            const productData = productDoc.data();
+
+            const existingNameKey =
+                productData.nameKey || normalizeKey(productData.name || "");
+
+            return existingNameKey === nameKey;
+            });
+
+            const activeDuplicate = matchingProducts.find((productDoc) => {
+            const productData = productDoc.data();
+            return productData.isActive !== false;
+            });
+
+            const inactiveDuplicate = matchingProducts.find((productDoc) => {
+            const productData = productDoc.data();
+            return productData.isActive === false;
+            });
+
+            if (activeDuplicate) {
+            setFormMessage(`${trimmedName} already exists in your active products.`);
+            return;
+            }
+
+            if (inactiveDuplicate) {
+            setFormMessage(
+                `${trimmedName} already exists but is inactive. Go to Inactive products and restore it instead.`
+            );
+            return;
+            }
+
+            setFormMessage("Saving product...");
+
+            await addDoc(collection(db, "products"), {
+            name: trimmedName,
+            nameKey,
+            category,
+            isAvailable,
+            isActive: true,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            });
+
+            resetForm();
+            setIsFormOpen(false);
+            showTemporaryMessage("Product saved successfully.");
+            await loadProducts();
+        } catch (error) {
+            console.error(error);
+            setFormMessage("Failed to save product. Please try again.");
+        } finally {
+            setIsSaving(false);
+        }
     }
-
-    setIsSaving(true);
-    setFormMessage("Saving product...");
-
-    try {
-      await addDoc(collection(db, "products"), {
-        name: name.trim(),
-        category,
-        isAvailable,
-        isActive: true,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-
-      resetForm();
-      setIsFormOpen(false);
-      showTemporaryMessage("Product saved successfully.");
-      await loadProducts();
-    } catch (error) {
-      console.error(error);
-      setFormMessage("Failed to save product. Please try again.");
-    } finally {
-      setIsSaving(false);
-    }
-  }
 
   async function handleRestoreProduct(product: Product) {
-    setFormMessage("Restoring product...");
+        setFormMessage("Restoring product...");
 
-    try {
-      const productRef = doc(db, "products", product.id);
+        try {
+            await updateDoc(doc(db, "products", product.id), {
+            isActive: true,
+            isAvailable: true,
+            nameKey: normalizeKey(product.name),
+            updatedAt: serverTimestamp(),
+            });
 
-      await updateDoc(productRef, {
-        isActive: true,
-        updatedAt: serverTimestamp(),
-      });
-
-      showTemporaryMessage("Product restored successfully.");
-      await loadProducts();
-    } catch (error) {
-      console.error(error);
-      setFormMessage("Failed to restore product. Please try again.");
+            closeProductDetails();
+            showTemporaryMessage("Product restored successfully.");
+            await loadProducts();
+        } catch (error) {
+            console.error(error);
+            setFormMessage("Failed to restore product. Please try again.");
+        }
     }
-  }
 
   async function handleAddProductSize(event: React.FormEvent<HTMLFormElement>) {
         event.preventDefault();
 
-        if (!selectedProduct) {
+        if (!selectedProduct || isSavingSize) {
             return;
         }
 
         const trimmedSizeName = sizeName.trim();
+        const sizeKey = normalizeKey(trimmedSizeName);
         const price = Number(sizePrice);
 
         if (!trimmedSizeName) {
@@ -376,24 +643,51 @@ function ProductsPanel() {
         }
 
         setIsSavingSize(true);
-        setFormMessage("Saving size...");
+        setFormMessage("Checking size...");
 
         try {
+            const existingSizesQuery = query(
+            collection(db, "productSizes"),
+            where("productId", "==", selectedProduct.id)
+            );
+
+            const existingSizesSnapshot = await getDocs(existingSizesQuery);
+
+            const duplicateSize = existingSizesSnapshot.docs.some((sizeDoc) => {
+            const sizeData = sizeDoc.data();
+
+            const existingSizeKey =
+                sizeData.sizeKey || normalizeKey(sizeData.sizeName || "");
+
+            return existingSizeKey === sizeKey && sizeData.isActive !== false;
+            });
+
+            if (duplicateSize) {
+            setFormMessage(
+                `${trimmedSizeName} already exists for ${selectedProduct.name}. Use a different size name.`
+            );
+            return;
+            }
+
+            setFormMessage("Saving size...");
+
             await addDoc(collection(db, "productSizes"), {
-            productId: selectedProduct.id,
-            productName: selectedProduct.name,
-            sizeName: trimmedSizeName,
-            price,
-            isAvailable: isSizeAvailable,
-            isActive: true,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
+                productId: selectedProduct.id,
+                productName: selectedProduct.name,
+                sizeName: trimmedSizeName,
+                sizeKey,
+                price,
+                isAvailable: false,
+                isActive: true,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
             });
 
             resetSizeForm();
             setIsSizeFormOpen(false);
             showTemporaryMessage("Size saved successfully.");
             await loadProductSizes(selectedProduct.id);
+            await loadProducts();
         } catch (error) {
             console.error(error);
             setFormMessage("Failed to save size. Please try again.");
@@ -477,6 +771,9 @@ function ProductsPanel() {
             setIsSavingRecipe(true);
             setFormMessage("Saving recipe...");
 
+            const recipeRef = doc(db, "recipes", selectedSize.id);
+            const existingRecipeSnapshot = await getDoc(recipeRef);
+
             const recipePayload = {
                 productId: selectedProduct.id,
                 productName: selectedProduct.name,
@@ -488,26 +785,27 @@ function ProductsPanel() {
                 estimatedProfit,
                 isComplete: true,
                 updatedAt: serverTimestamp(),
+                ...(existingRecipeSnapshot.exists() ? {} : { createdAt: serverTimestamp() }),
             };
 
             try {
-                if (savedRecipeId) {
-                const recipeRef = doc(db, "recipes", savedRecipeId);
+                await setDoc(recipeRef, recipePayload, { merge: true });
 
-                await updateDoc(recipeRef, recipePayload);
-
-                showTemporaryMessage("Recipe updated successfully.");
-                } else {
-                const newRecipeRef = await addDoc(collection(db, "recipes"), {
-                    ...recipePayload,
-                    createdAt: serverTimestamp(),
+                await updateDoc(doc(db, "productSizes", selectedSize.id), {
+                    isAvailable: true,
+                    updatedAt: serverTimestamp(),
                 });
 
-                setSavedRecipeId(newRecipeRef.id);
+                setSavedRecipeId(selectedSize.id);
 
-                showTemporaryMessage("Recipe saved successfully.");
-                }
+                showTemporaryMessage(
+                existingRecipeSnapshot.exists()
+                    ? "Recipe updated successfully."
+                    : "Recipe saved successfully."
+                );
 
+                await loadProductSizes(selectedProduct.id, "active");
+                await loadProducts();
                 closeRecipeSetup();
             } catch (error) {
                 console.error(error);
@@ -517,6 +815,305 @@ function ProductsPanel() {
             }
         }
 
+
+        async function handleDeactivateProduct() {
+            if (!selectedProduct || isDeactivatingProduct) {
+                return;
+            }
+
+            setIsDeactivatingProduct(true);
+            setFormMessage("Deactivating product...");
+
+            try {
+                await updateDoc(doc(db, "products", selectedProduct.id), {
+                isActive: false,
+                isAvailable: false,
+                updatedAt: serverTimestamp(),
+                });
+
+                setIsDeactivateProductConfirmOpen(false);
+                closeProductDetails();
+                showTemporaryMessage("Product deactivated successfully.");
+                await loadProducts();
+            } catch (error) {
+                console.error(error);
+                setFormMessage("Failed to deactivate product. Please try again.");
+            } finally {
+                setIsDeactivatingProduct(false);
+            }
+        }
+
+        function openEditSizeModal(size: ProductSize) {
+            setEditingSize(size);
+            setEditSizeName(size.sizeName);
+            setEditSizePrice(String(size.price));
+            setEditSizeAvailable(size.isAvailable);
+            setFormMessage("");
+        }
+
+        async function handleUpdateSize(event: React.FormEvent<HTMLFormElement>) {
+            event.preventDefault();
+
+            if (!selectedProduct || !editingSize || isUpdatingSize) {
+                return;
+            }
+
+            const trimmedSizeName = editSizeName.trim();
+            const sizeKey = normalizeKey(trimmedSizeName);
+            const price = Number(editSizePrice);
+
+            if (!trimmedSizeName) {
+                setFormMessage("Size name is required.");
+                return;
+            }
+
+            if (price <= 0) {
+                setFormMessage("Price must be greater than 0.");
+                return;
+            }
+
+            setIsUpdatingSize(true);
+            setFormMessage("Checking size...");
+
+            try {
+                const existingSizesQuery = query(
+                collection(db, "productSizes"),
+                where("productId", "==", selectedProduct.id)
+                );
+
+                const existingSizesSnapshot = await getDocs(existingSizesQuery);
+
+                const duplicateSize = existingSizesSnapshot.docs.some((sizeDoc) => {
+                if (sizeDoc.id === editingSize.id) {
+                    return false;
+                }
+
+                const sizeData = sizeDoc.data();
+
+                const existingSizeKey =
+                    sizeData.sizeKey || normalizeKey(sizeData.sizeName || "");
+
+                return existingSizeKey === sizeKey && sizeData.isActive !== false;
+                });
+
+                if (duplicateSize) {
+                setFormMessage(
+                    `${trimmedSizeName} already exists for ${selectedProduct.name}. Use a different size name.`
+                );
+                return;
+                }
+
+                setFormMessage("Saving size changes...");
+
+                const recipeRef = doc(db, "recipes", editingSize.id);
+                const recipeSnapshot = await getDoc(recipeRef);
+
+                const hasCompleteRecipe =
+                recipeSnapshot.exists() &&
+                recipeSnapshot.data().isComplete === true &&
+                Array.isArray(recipeSnapshot.data().ingredients) &&
+                recipeSnapshot.data().ingredients.length > 0;
+
+                await updateDoc(doc(db, "productSizes", editingSize.id), {
+                sizeName: trimmedSizeName,
+                sizeKey,
+                price,
+                isAvailable: hasCompleteRecipe ? editSizeAvailable : false,
+                productName: selectedProduct.name,
+                updatedAt: serverTimestamp(),
+                });
+
+                if (recipeSnapshot.exists()) {
+                await updateDoc(recipeRef, {
+                    productName: selectedProduct.name,
+                    sizeName: trimmedSizeName,
+                    price,
+                    updatedAt: serverTimestamp(),
+                });
+                }
+
+                setEditingSize(null);
+                showTemporaryMessage("Size updated successfully.");
+                await loadProductSizes(selectedProduct.id, "active");
+                await loadProducts();
+            } catch (error) {
+                console.error(error);
+                setFormMessage("Failed to update size. Please try again.");
+            } finally {
+                setIsUpdatingSize(false);
+            }
+        }
+
+        async function handleDeactivateSize() {
+            if (!selectedProduct || !sizeToDeactivate || isDeactivatingSize) {
+                return;
+            }
+
+            setIsDeactivatingSize(true);
+            setFormMessage("Deactivating size...");
+
+            try {
+                await updateDoc(doc(db, "productSizes", sizeToDeactivate.id), {
+                isActive: false,
+                isAvailable: false,
+                updatedAt: serverTimestamp(),
+                });
+
+                setSizeToDeactivate(null);
+                showTemporaryMessage("Size deactivated successfully.");
+                await loadProductSizes(selectedProduct.id);
+                await loadProducts();
+            } catch (error) {
+                console.error(error);
+                setFormMessage("Failed to deactivate size. Please try again.");
+            } finally {
+                setIsDeactivatingSize(false);
+            }
+        }
+
+        async function handleRestoreSize(size: ProductSize) {
+            if (!selectedProduct || isDeactivatingSize) {
+                return;
+            }
+
+            setIsDeactivatingSize(true);
+            setFormMessage("Checking size...");
+
+            try {
+                const existingSizesQuery = query(
+                collection(db, "productSizes"),
+                where("productId", "==", selectedProduct.id)
+                );
+
+                const existingSizesSnapshot = await getDocs(existingSizesQuery);
+                const sizeKey = normalizeKey(size.sizeName);
+
+                const activeDuplicate = existingSizesSnapshot.docs.some((sizeDoc) => {
+                if (sizeDoc.id === size.id) {
+                    return false;
+                }
+
+                const sizeData = sizeDoc.data();
+
+                const existingSizeKey =
+                    sizeData.sizeKey || normalizeKey(sizeData.sizeName || "");
+
+                return existingSizeKey === sizeKey && sizeData.isActive !== false;
+                });
+
+                if (activeDuplicate) {
+                setFormMessage(
+                    `${size.sizeName} already exists as an active size. Rename or deactivate the active one first.`
+                );
+                return;
+                }
+
+                setFormMessage("Restoring size...");
+
+                const recipeRef = doc(db, "recipes", size.id);
+const recipeSnapshot = await getDoc(recipeRef);
+
+const hasCompleteRecipe =
+  recipeSnapshot.exists() &&
+  recipeSnapshot.data().isComplete === true &&
+  Array.isArray(recipeSnapshot.data().ingredients) &&
+  recipeSnapshot.data().ingredients.length > 0;
+
+await updateDoc(doc(db, "productSizes", size.id), {
+  isActive: true,
+  isAvailable: hasCompleteRecipe,
+  sizeKey,
+  updatedAt: serverTimestamp(),
+});
+
+setSizeStatusFilter("active");
+
+await loadProductSizes(selectedProduct.id, "active");
+await loadProducts();
+
+showTemporaryMessage(
+  hasCompleteRecipe
+    ? "Size restored and ready for POS."
+    : "Size restored. Set up its recipe before selling."
+);
+            } catch (error) {
+                console.error(error);
+                setFormMessage("Failed to restore size. Please try again.");
+            } finally {
+                setIsDeactivatingSize(false);
+            }
+        }
+
+
+        function getSizeStatus(size: ProductSize) {
+  if (size.isActive === false) {
+    return {
+      label: "Archived",
+      className: "unavailable",
+    };
+  }
+
+  if (!size.hasCompleteRecipe) {
+    return {
+      label: "Needs Recipe",
+      className: "unavailable",
+    };
+  }
+
+  if (!size.isAvailable) {
+    return {
+      label: "Turned Off",
+      className: "unavailable",
+    };
+  }
+
+  return {
+    label: "Ready for POS",
+    className: "available",
+  };
+}
+
+        function getProductListStatus(product: Product) {
+  const sizeStats = productSizeStats[product.id] || {
+    total: 0,
+    ready: 0,
+    needsRecipe: 0,
+    unavailable: 0,
+  };
+
+  if (!product.isAvailable) {
+    return {
+      label: "Product Off",
+      className: "low",
+    };
+  }
+
+  if (sizeStats.total === 0) {
+    return {
+      label: "Needs Size",
+      className: "low",
+    };
+  }
+
+  if (sizeStats.ready > 0) {
+    return {
+      label: "Ready for POS",
+      className: "ok",
+    };
+  }
+
+  if (sizeStats.needsRecipe > 0) {
+    return {
+      label: "Needs Recipe",
+      className: "low",
+    };
+  }
+
+  return {
+    label: "No Sellable Size",
+    className: "low",
+  };
+}
 
   if (isFormOpen) {
     return (
@@ -569,13 +1166,15 @@ function ProductsPanel() {
 
           <label className="inventory-toggle-row">
             <input
-              type="checkbox"
-              checked={isAvailable}
-              onChange={(event) => setIsAvailable(event.target.checked)}
+                type="checkbox"
+                checked={isAvailable}
+                onChange={(event) => setIsAvailable(event.target.checked)}
             />
             <span>
-              <strong>Available for POS</strong>
-              <small>This product can appear in POS once recipe setup is complete.</small>
+                <strong>Product is turned on</strong>
+                <small>
+                Keep this on if the product should be allowed for POS after sizes and recipes are completed.
+                </small>
             </span>
           </label>
 
@@ -689,9 +1288,13 @@ function ProductsPanel() {
                 </div>
 
                 <div className="product-card-right">
-                  <span className={`ingredient-status ${product.isAvailable ? "ok" : "low"}`}>
-                    {product.isAvailable ? "Available" : "Unavailable"}
-                  </span>
+                  <span
+                        className={`ingredient-status ${
+                            getProductListStatus(product).className
+                        }`}
+                        >
+                        {getProductListStatus(product).label}
+                    </span>
 
                   {productStatusFilter === "inactive" && (
                     <button
@@ -736,26 +1339,71 @@ function ProductsPanel() {
 
                 <div className="product-modal-status-card">
                     <span>Status</span>
-                    <strong>{selectedProduct.isAvailable ? "Available for POS" : "Unavailable"}</strong>
+                    <strong>
+                        {productStatusFilter === "inactive"
+                        ? "Inactive Product"
+                        : selectedProduct.isAvailable
+                            ? "Available for POS"
+                            : "Unavailable"}
+                    </strong>
                 </div>
 
+            {productStatusFilter === "active" && (
                 <div className="product-sizes-section">
                     <div className="product-sizes-header">
-                    <div>
-                        <h4>Sizes & Prices</h4>
-                        <p>Set the selling sizes before creating recipes.</p>
-                    </div>
+                        <div>
+                            <h4>Sizes & Prices</h4>
+                            <p>
+                            Manage active sizes for POS, or restore archived sizes when needed.
+                            </p>
+                        </div>
 
-                    <button
-                        type="button"
-                        className="primary-inventory-button compact"
-                        onClick={() => {
-                        resetSizeForm();
-                        setIsSizeFormOpen(true);
-                        }}
-                    >
-                        + Add Size
-                    </button>
+                        {sizeStatusFilter === "active" && (
+                            <button
+                            type="button"
+                            className="primary-inventory-button compact"
+                            onClick={() => {
+                                resetSizeForm();
+                                setIsSizeFormOpen(true);
+                            }}
+                            >
+                            + Add Size
+                            </button>
+                        )}
+                        </div>
+
+                        <div className="ingredient-status-filter">
+                        <button
+                            type="button"
+                            className={sizeStatusFilter === "active" ? "active" : ""}
+                            onClick={async () => {
+                            if (!selectedProduct) {
+                                return;
+                            }
+
+                            setSizeStatusFilter("active");
+                            setFormMessage("");
+                            await loadProductSizes(selectedProduct.id, "active");
+                            }}
+                        >
+                            Active Sizes
+                        </button>
+
+                        <button
+                            type="button"
+                            className={sizeStatusFilter === "inactive" ? "active" : ""}
+                            onClick={async () => {
+                            if (!selectedProduct) {
+                                return;
+                            }
+
+                            setSizeStatusFilter("inactive");
+                            setFormMessage("");
+                            await loadProductSizes(selectedProduct.id, "inactive");
+                            }}
+                        >
+                            Inactive Sizes
+                        </button>
                     </div>
 
                     {isLoadingSizes && (
@@ -763,9 +1411,11 @@ function ProductsPanel() {
                     )}
 
                     {!isLoadingSizes && productSizes.length === 0 && (
-                    <p className="ingredients-empty-text">
-                        No sizes added yet. Add at least one size before recipe setup.
-                    </p>
+                        <p className="ingredients-empty-text">
+                            {sizeStatusFilter === "active"
+                            ? "No active sizes added yet. Add at least one size before recipe setup."
+                            : "No inactive sizes found for this product."}
+                        </p>
                     )}
 
                     {!isLoadingSizes && productSizes.length > 0 && (
@@ -774,39 +1424,404 @@ function ProductsPanel() {
                         <article className="product-size-card" key={size.id}>
                             <div className="product-size-info">
                                 <div>
-                                <h5>{size.sizeName}</h5>
-                                <p>{size.isAvailable ? "Available" : "Unavailable"}</p>
+                                    <h5>{size.sizeName}</h5>
+                                    <p>
+                                    <span className={`size-status-pill ${getSizeStatus(size).className}`}>
+                                        {getSizeStatus(size).label}
+                                    </span>
+                                    </p>
                                 </div>
 
                                 <strong>₱{size.price.toFixed(2)}</strong>
                             </div>
 
+                            {sizeStatusFilter === "active" ? (
+                            <>
                             <button
-                                type="button"
                                 className="secondary-inventory-button setup-recipe-button"
+                                type="button"
                                 onClick={() => openRecipeSetup(size)}
-                            >
-                                Setup Recipe
+                                >
+                                {size.hasCompleteRecipe ? "Update Recipe" : "Setup Recipe"}
                             </button>
+
+                            <button
+                            className="secondary-inventory-button setup-recipe-button"
+                            type="button"
+                            onClick={() => openEditSizeModal(size)}
+                            >
+                            Edit Size
+                            </button>
+
+                            <button
+                            className="danger-inventory-button setup-recipe-button"
+                            type="button"
+                            onClick={() => setSizeToDeactivate(size)}
+                            >
+                            Deactivate Size
+                            </button>
+                        </>
+                        ) : (
+                        <button
+                            className="primary-inventory-button setup-recipe-button"
+                            type="button"
+                            onClick={() => handleRestoreSize(size)}
+                            disabled={isDeactivatingSize}
+                        >
+                            {isDeactivatingSize ? "Restoring..." : "Restore Size"}
+                        </button>
+                        )}
                         </article>
                         ))}
                     </div>
                     )}
                 </div>
 
+                )}
+
                 <div className="product-modal-actions">
-                    <button type="button" className="secondary-inventory-button">
-                    Edit Product
+                    {productStatusFilter === "active" ? (
+                        <>
+                        <button
+                            type="button"
+                            className="secondary-inventory-button"
+                            onClick={openEditProductModal}
+                        >
+                            Edit Product
+                        </button>
+
+                        <button
+                            type="button"
+                            className="danger-inventory-button"
+                            onClick={() => setIsDeactivateProductConfirmOpen(true)}
+                        >
+                            Deactivate
+                        </button>
+                        </>
+                    ) : (
+                        <>
+                        <button
+                            type="button"
+                            className="primary-inventory-button"
+                            onClick={() => handleRestoreProduct(selectedProduct)}
+                        >
+                            Restore Product
+                        </button>
+
+                        <button
+                            type="button"
+                            className="secondary-inventory-button"
+                            onClick={closeProductDetails}
+                        >
+                            Close
+                        </button>
+                        </>
+                    )}
+                </div>
+            </section>
+        </div>
+    )}
+
+        {isEditProductModalOpen && selectedProduct && (
+          <div
+            className="edit-modal-overlay"
+            onClick={() => {
+              if (!isUpdatingProduct) {
+                setIsEditProductModalOpen(false);
+                setFormMessage("");
+              }
+            }}
+          >
+            <form
+              className="edit-modal"
+              onSubmit={handleUpdateProduct}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="edit-modal-header">
+                <div>
+                  <p className="inventory-eyebrow">Edit Product</p>
+                  <h3>{selectedProduct.name}</h3>
+                  <p>Update this product’s name, category, and POS availability.</p>
+                </div>
+
+                <button
+                  className="ingredient-modal-close"
+                  type="button"
+                  onClick={() => {
+                    if (!isUpdatingProduct) {
+                      setIsEditProductModalOpen(false);
+                      setFormMessage("");
+                    }
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="editProductName">Product name</label>
+                <input
+                  id="editProductName"
+                  value={editProductName}
+                  onChange={(event) => setEditProductName(event.target.value)}
+                  placeholder="Example: Wintermelon Milk Tea"
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="editProductCategory">Category</label>
+                <select
+                  id="editProductCategory"
+                  value={editProductCategory}
+                  onChange={(event) =>
+                    setEditProductCategory(event.target.value as ProductCategory)
+                  }
+                >
+                  {productCategories.map((productCategory) => (
+                    <option key={productCategory} value={productCategory}>
+                      {productCategory}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <label className="inventory-toggle-row">
+                <input
+                  type="checkbox"
+                  checked={editProductAvailable}
+                  onChange={(event) =>
+                    setEditProductAvailable(event.target.checked)
+                  }
+                />
+                <span>
+                  <strong>Available for POS</strong>
+                  <small>Turn this off if the item should not appear in POS.</small>
+                </span>
+              </label>
+
+              {formMessage && <p className="inventory-form-message">{formMessage}</p>}
+
+              <div className="edit-modal-actions">
+                <button
+                  className="primary-inventory-button"
+                  type="submit"
+                  disabled={isUpdatingProduct}
+                >
+                  {isUpdatingProduct ? "Saving..." : "Save Changes"}
+                </button>
+
+                <button
+                  className="secondary-inventory-button"
+                  type="button"
+                  disabled={isUpdatingProduct}
+                  onClick={() => {
+                    setIsEditProductModalOpen(false);
+                    setFormMessage("");
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {isDeactivateProductConfirmOpen && selectedProduct && (
+            <div
+                className="confirm-modal-overlay"
+                onClick={() => {
+                if (!isDeactivatingProduct) {
+                    setIsDeactivateProductConfirmOpen(false);
+                }
+                }}
+            >
+                <section
+                className="confirm-modal"
+                onClick={(event) => event.stopPropagation()}
+                >
+                <div className="confirm-modal-icon">!</div>
+
+                <div>
+                    <p className="inventory-eyebrow">Confirm Action</p>
+                    <h3>Deactivate {selectedProduct.name}?</h3>
+                    <p>
+                    This will hide the product from active lists and POS, but keep its
+                    record safe for recipe and transaction history.
+                    </p>
+                </div>
+
+                {formMessage && <p className="inventory-form-message">{formMessage}</p>}
+
+                <div className="confirm-modal-actions">
+                    <button
+                    type="button"
+                    className="danger-inventory-button"
+                    onClick={handleDeactivateProduct}
+                    disabled={isDeactivatingProduct}
+                    >
+                    {isDeactivatingProduct ? "Deactivating..." : "Yes, Deactivate"}
                     </button>
 
-                    <button type="button" className="danger-inventory-button">
-                    Deactivate
+                    <button
+                    type="button"
+                    className="secondary-inventory-button"
+                    onClick={() => setIsDeactivateProductConfirmOpen(false)}
+                    disabled={isDeactivatingProduct}
+                    >
+                    Cancel
                     </button>
                 </div>
                 </section>
             </div>
         )}
 
+        {sizeToDeactivate && selectedProduct && (
+            <div
+                className="confirm-modal-overlay"
+                onClick={() => {
+                if (!isDeactivatingSize) {
+                    setSizeToDeactivate(null);
+                    setFormMessage("");
+                }
+                }}
+            >
+                <section
+                className="confirm-modal"
+                onClick={(event) => event.stopPropagation()}
+                >
+                <div className="confirm-modal-icon">!</div>
+
+                <div>
+                    <p className="inventory-eyebrow">Confirm Action</p>
+                    <h3>Deactivate {sizeToDeactivate.sizeName}?</h3>
+                    <p>
+                    This will archive this size and hide it from the product size list and
+                    POS. Existing recipe records stay safe for history.
+                    </p>
+                </div>
+
+                {formMessage && <p className="inventory-form-message">{formMessage}</p>}
+
+                <div className="confirm-modal-actions">
+                    <button
+                    type="button"
+                    className="danger-inventory-button"
+                    onClick={handleDeactivateSize}
+                    disabled={isDeactivatingSize}
+                    >
+                    {isDeactivatingSize ? "Deactivating..." : "Yes, Deactivate"}
+                    </button>
+
+                    <button
+                    type="button"
+                    className="secondary-inventory-button"
+                    onClick={() => {
+                        setSizeToDeactivate(null);
+                        setFormMessage("");
+                    }}
+                    disabled={isDeactivatingSize}
+                    >
+                    Cancel
+                    </button>
+                </div>
+                </section>
+            </div>
+        )}
+
+        {editingSize && selectedProduct && (
+            <div
+                className="size-modal-overlay"
+                onClick={() => {
+                if (!isUpdatingSize) {
+                    setEditingSize(null);
+                    setFormMessage("");
+                }
+                }}
+            >
+                <form
+                className="size-modal"
+                onSubmit={handleUpdateSize}
+                onClick={(event) => event.stopPropagation()}
+                >
+                <div className="size-modal-header">
+                    <div>
+                    <p className="inventory-eyebrow">Edit Size</p>
+                    <h3>{selectedProduct.name}</h3>
+                    <p>Update this size name, selling price, and POS availability.</p>
+                    </div>
+
+                    <button
+                    className="ingredient-modal-close"
+                    type="button"
+                    onClick={() => {
+                        if (!isUpdatingSize) {
+                        setEditingSize(null);
+                        setFormMessage("");
+                        }
+                    }}
+                    >
+                    ×
+                    </button>
+                </div>
+
+                <div className="form-group">
+                    <label htmlFor="editSizeName">Size name</label>
+                    <input
+                    id="editSizeName"
+                    value={editSizeName}
+                    onChange={(event) => setEditSizeName(event.target.value)}
+                    placeholder="Example: Solo, Double, Large"
+                    />
+                </div>
+
+                <div className="form-group">
+                    <label htmlFor="editSizePrice">Selling price</label>
+                    <input
+                    id="editSizePrice"
+                    type="number"
+                    min="1"
+                    step="0.01"
+                    value={editSizePrice}
+                    onChange={(event) => setEditSizePrice(event.target.value)}
+                    placeholder="Example: 39"
+                    />
+                </div>
+
+                <div className="inventory-toggle-row">
+                    <span>
+                        <strong>Needs recipe before selling</strong>
+                        <small>
+                        After saving this size, tap Setup Recipe. It will only become ready for POS after the recipe is complete.
+                        </small>
+                    </span>
+                </div>
+
+                {formMessage && <p className="inventory-form-message">{formMessage}</p>}
+
+                <div className="size-modal-actions">
+                    <button
+                    className="primary-inventory-button"
+                    type="submit"
+                    disabled={isUpdatingSize}
+                    >
+                    {isUpdatingSize ? "Saving..." : "Save Changes"}
+                    </button>
+
+                    <button
+                    className="secondary-inventory-button"
+                    type="button"
+                    disabled={isUpdatingSize}
+                    onClick={() => {
+                        setEditingSize(null);
+                        setFormMessage("");
+                    }}
+                    >
+                    Cancel
+                    </button>
+                </div>
+                </form>
+            </div>
+        )}
 
         {isSizeFormOpen && selectedProduct && (
             <div

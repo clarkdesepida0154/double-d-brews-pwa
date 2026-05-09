@@ -88,9 +88,12 @@ export type Product = {
 export type ProductSize = {
   id: string;
   productId: string;
+  productName?: string;
   sizeName: string;
   price: number;
   isAvailable: boolean;
+  isActive?: boolean;
+  hasCompleteRecipe?: boolean;
 };
 
 export type RecipeIngredient = {

@@ -11,90 +11,124 @@ function RecipesPanel() {
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
 
   const loadRecipes = useCallback(async () => {
-        setIsLoadingRecipes(true);
-        setMessage("");
+  setIsLoadingRecipes(true);
+  setMessage("");
 
-        try {
-            const recipesQuery = query(collection(db, "recipes"));
-            const recipesSnapshot = await getDocs(recipesQuery);
+  try {
+    const activeProductsQuery = query(
+      collection(db, "products"),
+      where("isActive", "==", true)
+    );
 
-            const loadedRecipes: Recipe[] = recipesSnapshot.docs.map((docSnapshot) => {
-            const data = docSnapshot.data();
+    const activeProductsSnapshot = await getDocs(activeProductsQuery);
 
-            return {
-                id: docSnapshot.id,
-                productId: data.productId,
-                productName: data.productName,
-                sizeId: data.sizeId,
-                sizeName: data.sizeName,
-                price: data.price,
-                ingredients: data.ingredients || [],
-                totalRecipeCost: data.totalRecipeCost || 0,
-                isComplete: data.isComplete ?? false,
-            };
-            });
+    const activeProductIds = new Set(
+      activeProductsSnapshot.docs.map((docSnapshot) => docSnapshot.id)
+    );
 
-            const sizesQuery = query(
-            collection(db, "productSizes"),
-            where("isActive", "==", true)
-            );
+    const activeProductNames = new Map(
+      activeProductsSnapshot.docs.map((docSnapshot) => {
+        const data = docSnapshot.data();
+        return [docSnapshot.id, data.name || "Unnamed Product"];
+      })
+    );
 
-            const sizesSnapshot = await getDocs(sizesQuery);
+    const activeSizesQuery = query(
+      collection(db, "productSizes"),
+      where("isActive", "==", true)
+    );
 
-            const loadedSizes: ProductSize[] = sizesSnapshot.docs.map((docSnapshot) => {
-            const data = docSnapshot.data();
+    const activeSizesSnapshot = await getDocs(activeSizesQuery);
 
-            return {
-                id: docSnapshot.id,
-                productId: data.productId,
-                sizeName: data.sizeName,
-                price: data.price,
-                isAvailable: data.isAvailable,
-            };
-            });
+    const activeSizes: ProductSize[] = activeSizesSnapshot.docs
+      .map((docSnapshot) => {
+        const data = docSnapshot.data();
 
-            const recipeSizeIds = new Set(
-            loadedRecipes.map((recipe) => recipe.sizeId)
-            );
+        return {
+          id: docSnapshot.id,
+          productId: data.productId,
+          productName:
+            activeProductNames.get(data.productId) ||
+            data.productName ||
+            "Unknown Product",
+          sizeName: data.sizeName,
+          price: data.price,
+          isAvailable: data.isAvailable,
+          isActive: data.isActive ?? true,
+        };
+      })
+      .filter((size) => activeProductIds.has(size.productId));
 
-            const sizesWithoutRecipes = loadedSizes.filter(
-            (size) => !recipeSizeIds.has(size.id)
-            );
+    const activeSizeIds = new Set(activeSizes.map((size) => size.id));
 
-            const uniqueRecipes = loadedRecipes.reduce<Recipe[]>((uniqueList, recipe) => {
-                const alreadyExists = uniqueList.some(
-                    (existingRecipe) => existingRecipe.sizeId === recipe.sizeId
-                );
+    const recipesSnapshot = await getDocs(collection(db, "recipes"));
 
-                if (!alreadyExists) {
-                    uniqueList.push(recipe);
-                }
+    const loadedRecipes: Recipe[] = recipesSnapshot.docs
+      .map((docSnapshot) => {
+        const data = docSnapshot.data();
 
-                return uniqueList;
-                }, []);
+        return {
+          id: docSnapshot.id,
+          productId: data.productId,
+          productName:
+            activeProductNames.get(data.productId) ||
+            data.productName ||
+            "Unknown Product",
+          sizeId: data.sizeId,
+          sizeName: data.sizeName,
+          price: data.price,
+          ingredients: data.ingredients || [],
+          totalRecipeCost: data.totalRecipeCost || 0,
+          isComplete: data.isComplete ?? false,
+        };
+      })
+      .filter((recipe) => {
+        return (
+          activeProductIds.has(recipe.productId) &&
+          activeSizeIds.has(recipe.sizeId)
+        );
+      });
 
-                setRecipes(
-                uniqueRecipes.sort((a, b) =>
-                    `${a.productName} ${a.sizeName}`.localeCompare(
-                    `${b.productName} ${b.sizeName}`
-                    )
-                )
-            );
+    const recipeSizeIds = new Set(loadedRecipes.map((recipe) => recipe.sizeId));
 
-            setMissingRecipeSizes(
-            sizesWithoutRecipes.sort((a, b) =>
-                `${a.productId} ${a.sizeName}`.localeCompare(
-                `${b.productId} ${b.sizeName}`
-                )
-            )
-            );
-        } catch (error) {
-            console.error(error);
-            setMessage("Failed to load recipes.");
-        } finally {
-            setIsLoadingRecipes(false);
-        }
+    const sizesWithoutRecipes = activeSizes.filter(
+      (size) => !recipeSizeIds.has(size.id)
+    );
+
+    const uniqueRecipes = loadedRecipes.reduce<Recipe[]>((uniqueList, recipe) => {
+      const alreadyExists = uniqueList.some(
+        (existingRecipe) => existingRecipe.sizeId === recipe.sizeId
+      );
+
+      if (!alreadyExists) {
+        uniqueList.push(recipe);
+      }
+
+      return uniqueList;
     }, []);
+
+    setRecipes(
+      uniqueRecipes.sort((a, b) =>
+        `${a.productName} ${a.sizeName}`.localeCompare(
+          `${b.productName} ${b.sizeName}`
+        )
+      )
+    );
+
+    setMissingRecipeSizes(
+      sizesWithoutRecipes.sort((a, b) =>
+        `${a.productName || ""} ${a.sizeName}`.localeCompare(
+          `${b.productName || ""} ${b.sizeName}`
+        )
+      )
+    );
+  } catch (error) {
+    console.error(error);
+    setMessage("Failed to load recipes.");
+  } finally {
+    setIsLoadingRecipes(false);
+  }
+}, []);
 
   useEffect(() => {
     loadRecipes();
@@ -145,13 +179,15 @@ function RecipesPanel() {
                 <div className="missing-recipes-list">
                 {missingRecipeSizes.map((size) => (
                     <article className="missing-recipe-card" key={size.id}>
-                    <div>
-                        <h5>{size.sizeName}</h5>
-                        <p>Product ID: {size.productId}</p>
-                        <p>Selling price: ₱{size.price.toFixed(2)}</p>
-                    </div>
+                        <div>
+                            <h5>{size.productName || "Unknown Product"}</h5>
+                            <p>Size: {size.sizeName}</p>
+                            <p>Selling price: ₱{size.price.toFixed(2)}</p>
+                        </div>
 
-                    <span className="ingredient-status low">Missing</span>
+                        <div className="missing-recipe-actions">
+                            <span className="ingredient-status low">Missing</span>
+                        </div>
                     </article>
                 ))}
                 </div>

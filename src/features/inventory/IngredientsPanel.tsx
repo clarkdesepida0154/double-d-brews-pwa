@@ -22,6 +22,9 @@ import {
   formatIngredientStock,
 } from "./inventoryUtils";
 
+function normalizeKey(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
 const purchaseUnits: PurchaseUnit[] = [
   "bag",
   "bottle",
@@ -384,56 +387,95 @@ function IngredientsPanel() {
   }
 
   async function handleAddIngredient(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+      event.preventDefault();
 
-    const validationError = validateIngredientForm();
+      const validationError = validateIngredientForm();
 
-    if (validationError) {
-      setFormMessage(validationError);
-      return;
+      if (validationError) {
+        setFormMessage(validationError);
+        return;
+      }
+
+      const trimmedName = name.trim();
+      const nameKey = normalizeKey(trimmedName);
+
+      setIsSaving(true);
+      setFormMessage("Checking ingredient...");
+
+      try {
+        const allIngredientsSnapshot = await getDocs(collection(db, "ingredients"));
+
+        const matchingIngredients = allIngredientsSnapshot.docs.filter((ingredientDoc) => {
+          const ingredientData = ingredientDoc.data();
+
+          const existingNameKey =
+            ingredientData.nameKey || normalizeKey(ingredientData.name || "");
+
+          return existingNameKey === nameKey;
+        });
+
+        const activeDuplicate = matchingIngredients.find((ingredientDoc) => {
+          const ingredientData = ingredientDoc.data();
+          return ingredientData.isActive !== false;
+        });
+
+        const inactiveDuplicate = matchingIngredients.find((ingredientDoc) => {
+          const ingredientData = ingredientDoc.data();
+          return ingredientData.isActive === false;
+        });
+
+        if (activeDuplicate) {
+          setFormMessage(`${trimmedName} already exists in your active ingredients.`);
+          return;
+        }
+
+        if (inactiveDuplicate) {
+          setFormMessage(
+            `${trimmedName} already exists but is inactive. Go to Inactive ingredients and restore it instead.`
+          );
+          return;
+        }
+
+        setFormMessage("Saving ingredient...");
+
+        const conversion = Number(usagePerPurchaseUnit);
+        const cost = Number(purchaseCost);
+        const stockQuantity = Number(currentStockQuantity);
+        const threshold = Number(minThreshold);
+
+        const currentStock = calculateStockFromPurchaseQuantity(
+          stockQuantity,
+          conversion
+        );
+
+        const costPerUsageUnit = calculateCostPerUsageUnit(cost, conversion);
+
+        await addDoc(collection(db, "ingredients"), {
+          name: trimmedName,
+          nameKey,
+          purchaseUnit,
+          usageUnit,
+          usagePerPurchaseUnit: conversion,
+          purchaseCost: cost,
+          currentStock,
+          minThreshold: threshold,
+          costPerUsageUnit,
+          isActive: true,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+
+        resetForm();
+        setIsFormOpen(false);
+        showTemporaryMessage("Ingredient saved successfully.");
+        await loadIngredients();
+      } catch (error) {
+        console.error(error);
+        setFormMessage("Failed to save ingredient. Please try again.");
+      } finally {
+        setIsSaving(false);
+      }
     }
-
-    setIsSaving(true);
-    setFormMessage("Saving ingredient...");
-
-    try {
-      const conversion = Number(usagePerPurchaseUnit);
-      const cost = Number(purchaseCost);
-      const stockQuantity = Number(currentStockQuantity);
-      const threshold = Number(minThreshold);
-
-      const currentStock = calculateStockFromPurchaseQuantity(
-        stockQuantity,
-        conversion
-      );
-
-      const costPerUsageUnit = calculateCostPerUsageUnit(cost, conversion);
-
-      await addDoc(collection(db, "ingredients"), {
-        name: name.trim(),
-        purchaseUnit,
-        usageUnit,
-        usagePerPurchaseUnit: conversion,
-        purchaseCost: cost,
-        currentStock,
-        minThreshold: threshold,
-        costPerUsageUnit,
-        isActive: true,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-
-      resetForm();
-      setIsFormOpen(false);
-      showTemporaryMessage("Ingredient saved successfully.");
-      await loadIngredients();
-    } catch (error) {
-      console.error(error);
-      setFormMessage("Failed to save ingredient. Please try again.");
-    } finally {
-      setIsSaving(false);
-    }
-  }
 
   if (isFormOpen) {
     return (
