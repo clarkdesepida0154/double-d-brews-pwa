@@ -514,7 +514,7 @@
 .pos-confirm-overlay {
   position: fixed;
   inset: 0;
-  z-index: 1390;
+  z-index: 1600;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -885,54 +885,54 @@
   }
 
   .thermal-store-info {
-  text-align: center !important;
-  font-size: 8px !important;
-  margin: 0 0 4px !important;
-  color: #000000 !important;
-}
+    text-align: center !important;
+    font-size: 8px !important;
+    margin: 0 0 4px !important;
+    color: #000000 !important;
+  }
 
-.thermal-copy-label {
-  text-align: center !important;
-  font-size: 9px !important;
-  font-weight: 900 !important;
-  letter-spacing: 0.5px !important;
-  color: #000000 !important;
-}
+  .thermal-copy-label {
+    text-align: center !important;
+    font-size: 9px !important;
+    font-weight: 900 !important;
+    letter-spacing: 0.5px !important;
+    color: #000000 !important;
+  }
 
-.thermal-table-head {
-  display: flex !important;
-  justify-content: space-between !important;
-  gap: 6px !important;
-  color: #000000 !important;
-  font-size: 8px !important;
-  font-weight: 900 !important;
-}
+  .thermal-table-head {
+    display: flex !important;
+    justify-content: space-between !important;
+    gap: 6px !important;
+    color: #000000 !important;
+    font-size: 8px !important;
+    font-weight: 900 !important;
+  }
 
-.thermal-line.compact {
-  margin: 3px 0 !important;
-}
+  .thermal-line.compact {
+    margin: 3px 0 !important;
+  }
 
-.thermal-empty-warning {
-  color: #000000 !important;
-  font-size: 8.5px !important;
-  font-weight: 700 !important;
-  margin: 4px 0 !important;
-}
+  .thermal-empty-warning {
+    color: #000000 !important;
+    font-size: 8.5px !important;
+    font-weight: 700 !important;
+    margin: 4px 0 !important;
+  }
 
-.thermal-note-title {
-  color: #000000 !important;
-  font-size: 8.5px !important;
-  font-weight: 900 !important;
-  margin-bottom: 2px !important;
-}
+  .thermal-note-title {
+    color: #000000 !important;
+    font-size: 8.5px !important;
+    font-weight: 900 !important;
+    margin-bottom: 2px !important;
+  }
 
-.thermal-policy {
-  color: #000000 !important;
-  font-size: 7.5px !important;
-  line-height: 1.2 !important;
-  text-align: center !important;
-  margin: 4px 0 !important;
-}
+  .thermal-policy {
+    color: #000000 !important;
+    font-size: 7.5px !important;
+    line-height: 1.2 !important;
+    text-align: center !important;
+    margin: 4px 0 !important;
+  }
 
   .thermal-line {
     border-top: 1px dashed #000000 !important;

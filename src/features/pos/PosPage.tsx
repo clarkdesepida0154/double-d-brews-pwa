@@ -790,6 +790,8 @@ function confirmReprintSale() {
 }
 
 function requestReprintSale(sale: SaleHistoryItem) {
+  setSelectedSale(null);
+  setSaleToVoid(null);
   setSaleToReprint(sale);
   setMessage("");
 }
