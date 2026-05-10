@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../../firebase/config";
 import type { UserProfile } from "../../types/UserProfile";
@@ -7,6 +7,24 @@ import "./SettingsPage.css";
 type SettingsPageProps = {
   userRole?: "developer" | "owner" | "staff";
   userProfile: UserProfile;
+};
+
+type PrinterPaperSize = "58mm" | "80mm";
+
+type PrinterSettings = {
+  paperSize: PrinterPaperSize;
+  receiptCopies: number;
+  autoPrintAfterSale: boolean;
+  printerMode: "browser-preview" | "android-bluetooth";
+};
+
+const PRINTER_SETTINGS_KEY = "double-d-brews-printer-settings";
+
+const defaultPrinterSettings: PrinterSettings = {
+  paperSize: "58mm",
+  receiptCopies: 1,
+  autoPrintAfterSale: false,
+  printerMode: "browser-preview",
 };
 
 function getSettingsRoleLabel(userRole: SettingsPageProps["userRole"]) {
@@ -21,16 +39,60 @@ function getSettingsRoleLabel(userRole: SettingsPageProps["userRole"]) {
   return "Owner";
 }
 
+function loadSavedPrinterSettings(): PrinterSettings {
+  try {
+    const savedSettings = window.localStorage.getItem(PRINTER_SETTINGS_KEY);
+
+    if (!savedSettings) {
+      return defaultPrinterSettings;
+    }
+
+    const parsedSettings = JSON.parse(savedSettings) as Partial<PrinterSettings>;
+
+    return {
+      paperSize:
+        parsedSettings.paperSize === "80mm" || parsedSettings.paperSize === "58mm"
+          ? parsedSettings.paperSize
+          : defaultPrinterSettings.paperSize,
+      receiptCopies:
+        parsedSettings.receiptCopies === 2 ? 2 : defaultPrinterSettings.receiptCopies,
+      autoPrintAfterSale: Boolean(parsedSettings.autoPrintAfterSale),
+      printerMode:
+        parsedSettings.printerMode === "android-bluetooth"
+          ? "android-bluetooth"
+          : "browser-preview",
+    };
+  } catch (error) {
+    console.error(error);
+    return defaultPrinterSettings;
+  }
+}
+
 function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [isPrinterModalOpen, setIsPrinterModalOpen] = useState(false);
+
   const [accountMessage, setAccountMessage] = useState("");
   const [accountMessageType, setAccountMessageType] = useState<"success" | "error">(
     "success"
   );
   const [isSendingResetEmail, setIsSendingResetEmail] = useState(false);
 
+  const [printerSettings, setPrinterSettings] = useState<PrinterSettings>(
+    defaultPrinterSettings
+  );
+  const [printerMessage, setPrinterMessage] = useState("");
+  const [printerMessageType, setPrinterMessageType] = useState<"success" | "error">(
+    "success"
+  );
+  const [isTestReceiptVisible, setIsTestReceiptVisible] = useState(false);
+
   const isStaffMode = userRole === "staff";
   const roleLabel = getSettingsRoleLabel(userRole);
+
+  useEffect(() => {
+    setPrinterSettings(loadSavedPrinterSettings());
+  }, []);
 
   async function handleSendPasswordResetEmail() {
     setAccountMessage("");
@@ -65,6 +127,38 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
   function closeAccountModal() {
     setIsAccountModalOpen(false);
     setAccountMessage("");
+  }
+
+  function openPrinterModal() {
+    setPrinterSettings(loadSavedPrinterSettings());
+    setPrinterMessage("");
+    setIsTestReceiptVisible(false);
+    setIsPrinterModalOpen(true);
+  }
+
+  function closePrinterModal() {
+    setIsPrinterModalOpen(false);
+    setPrinterMessage("");
+    setIsTestReceiptVisible(false);
+  }
+
+  function handleSavePrinterSettings() {
+    try {
+      window.localStorage.setItem(
+        PRINTER_SETTINGS_KEY,
+        JSON.stringify(printerSettings)
+      );
+
+      setPrinterMessageType("success");
+      setPrinterMessage("Printer preferences saved successfully on this device.");
+    } catch (error) {
+      console.error(error);
+
+      setPrinterMessageType("error");
+      setPrinterMessage(
+        "Unable to save printer preferences on this device. Please try again."
+      );
+    }
   }
 
   return (
@@ -122,13 +216,17 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
             <p className="settings-card-label">Printer</p>
             <h3>Thermal Receipt Printer</h3>
             <p>
-              Connect and manage the Bluetooth thermal receipt printer used by
-              the POS terminal.
+              Save receipt printer preferences for this device. Android Bluetooth
+              printing will use this setup later during the APK phase.
             </p>
           </div>
 
-          <button className="settings-card-button" type="button" disabled>
-            Coming Soon
+          <button
+            className="settings-card-button active"
+            type="button"
+            onClick={openPrinterModal}
+          >
+            Open Printer Settings
           </button>
         </article>
 
@@ -255,6 +353,164 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
                 className="settings-secondary-button"
                 type="button"
                 onClick={closeAccountModal}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isPrinterModalOpen && (
+        <div className="settings-modal-overlay" onClick={closePrinterModal}>
+          <div
+            className="settings-modal printer-settings-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="settings-modal-header">
+              <div>
+                <p className="settings-kicker">Printer Setup</p>
+                <h3>Thermal Receipt Printer</h3>
+                <p>
+                  Set receipt paper and print behavior for this device. Bluetooth
+                  connection will be added during the Android APK phase.
+                </p>
+              </div>
+
+              <button
+                className="settings-modal-close"
+                type="button"
+                onClick={closePrinterModal}
+                aria-label="Close printer settings"
+              >
+                ×
+              </button>
+            </div>
+
+            <section className="printer-settings-grid">
+              <label className="printer-setting-field">
+                <span>Receipt Paper Size</span>
+                <select
+                  value={printerSettings.paperSize}
+                  onChange={(event) =>
+                    setPrinterSettings((currentSettings) => ({
+                      ...currentSettings,
+                      paperSize: event.target.value as PrinterPaperSize,
+                    }))
+                  }
+                >
+                  <option value="58mm">58mm Thermal Paper</option>
+                  <option value="80mm">80mm Thermal Paper</option>
+                </select>
+              </label>
+
+              <label className="printer-setting-field">
+                <span>Receipt Copies</span>
+                <select
+                  value={printerSettings.receiptCopies}
+                  onChange={(event) =>
+                    setPrinterSettings((currentSettings) => ({
+                      ...currentSettings,
+                      receiptCopies: Number(event.target.value),
+                    }))
+                  }
+                >
+                  <option value={1}>1 Copy</option>
+                  <option value={2}>2 Copies</option>
+                </select>
+              </label>
+
+              <label className="printer-toggle-card">
+                <input
+                  type="checkbox"
+                  checked={printerSettings.autoPrintAfterSale}
+                  onChange={(event) =>
+                    setPrinterSettings((currentSettings) => ({
+                      ...currentSettings,
+                      autoPrintAfterSale: event.target.checked,
+                    }))
+                  }
+                />
+
+                <span>
+                  <strong>Auto-print after sale</strong>
+                  <small>
+                    After POS is connected to printer settings, completed sales can
+                    automatically trigger receipt printing.
+                  </small>
+                </span>
+              </label>
+
+              <div className="printer-mode-card">
+                <span>Printer Mode</span>
+                <strong>
+                  {printerSettings.printerMode === "browser-preview"
+                    ? "Browser Preview"
+                    : "Android Bluetooth"}
+                </strong>
+                <p>
+                  Browser Preview is active during development. Android Bluetooth
+                  mode will be enabled after Capacitor APK setup and real printer
+                  testing.
+                </p>
+              </div>
+            </section>
+
+            <section className="printer-apk-note">
+              <strong>APK-ready plan</strong>
+              <p>
+                For the Android app, the printer should use native ESC/POS Bluetooth
+                printing. That will print only the receipt content, feed a small
+                ending space, then stop for tearing or cutting.
+              </p>
+            </section>
+
+            {printerMessage && (
+              <p className={`settings-account-message ${printerMessageType}`}>
+                {printerMessage}
+              </p>
+            )}
+
+            {isTestReceiptVisible && (
+              <section className="printer-test-receipt-card">
+                <div className="printer-test-receipt">
+                  <h4>DOUBLE D&apos;BREWS</h4>
+                  <p>Printer Test Receipt</p>
+                  <div className="printer-test-line"></div>
+                  <p>Paper: {printerSettings.paperSize}</p>
+                  <p>Copies: {printerSettings.receiptCopies}</p>
+                  <p>
+                    Auto Print:{" "}
+                    {printerSettings.autoPrintAfterSale ? "Enabled" : "Disabled"}
+                  </p>
+                  <div className="printer-test-line"></div>
+                  <strong>Printer settings are ready.</strong>
+                  <p>Please test real Bluetooth printing during APK setup.</p>
+                </div>
+              </section>
+            )}
+
+            <div className="settings-modal-actions">
+              <button
+                className="settings-primary-button"
+                type="button"
+                onClick={handleSavePrinterSettings}
+              >
+                Save Printer Settings
+              </button>
+
+              <button
+                className="settings-secondary-button"
+                type="button"
+                onClick={() => setIsTestReceiptVisible((isVisible) => !isVisible)}
+              >
+                {isTestReceiptVisible ? "Hide Test Receipt" : "Show Test Receipt"}
+              </button>
+
+              <button
+                className="settings-secondary-button"
+                type="button"
+                onClick={closePrinterModal}
               >
                 Close
               </button>

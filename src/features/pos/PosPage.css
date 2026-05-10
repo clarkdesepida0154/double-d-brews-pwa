@@ -1284,3 +1284,33 @@
   color: #8c3b31;
   font-weight: 800;
 }
+
+/* =========================
+   POS Printer Settings Note
+========================= */
+
+.pos-printer-settings-note {
+  border: 1px solid rgba(92, 55, 31, 0.14);
+  border-radius: 16px;
+  background: rgba(244, 231, 211, 0.72);
+  padding: 12px;
+  margin-bottom: 14px;
+}
+
+.pos-printer-settings-note span {
+  display: block;
+  color: #76563b;
+  font-size: 12px;
+  font-weight: 1000;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pos-printer-settings-note strong {
+  display: block;
+  margin-top: 4px;
+  color: #321d12;
+  font-size: 14px;
+  font-weight: 1000;
+  line-height: 1.35;
+}

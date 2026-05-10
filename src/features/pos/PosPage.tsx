@@ -55,6 +55,57 @@ type CompletedSaleReceipt = {
 type PosTab = "new-order" | "sales-history";
 type ToastType = "success" | "error" | "info";
 
+type PrinterPaperSize = "58mm" | "80mm";
+
+type PrinterSettings = {
+  paperSize: PrinterPaperSize;
+  receiptCopies: number;
+  autoPrintAfterSale: boolean;
+  printerMode: "browser-preview" | "android-bluetooth";
+};
+
+const PRINTER_SETTINGS_KEY = "double-d-brews-printer-settings";
+
+const defaultPrinterSettings: PrinterSettings = {
+  paperSize: "58mm",
+  receiptCopies: 1,
+  autoPrintAfterSale: false,
+  printerMode: "browser-preview",
+};
+
+function loadSavedPrinterSettings(): PrinterSettings {
+  try {
+    if (typeof window === "undefined") {
+      return defaultPrinterSettings;
+    }
+
+    const savedSettings = window.localStorage.getItem(PRINTER_SETTINGS_KEY);
+
+    if (!savedSettings) {
+      return defaultPrinterSettings;
+    }
+
+    const parsedSettings = JSON.parse(savedSettings) as Partial<PrinterSettings>;
+
+    return {
+      paperSize:
+        parsedSettings.paperSize === "80mm" || parsedSettings.paperSize === "58mm"
+          ? parsedSettings.paperSize
+          : defaultPrinterSettings.paperSize,
+      receiptCopies:
+        parsedSettings.receiptCopies === 2 ? 2 : defaultPrinterSettings.receiptCopies,
+      autoPrintAfterSale: Boolean(parsedSettings.autoPrintAfterSale),
+      printerMode:
+        parsedSettings.printerMode === "android-bluetooth"
+          ? "android-bluetooth"
+          : "browser-preview",
+    };
+  } catch (error) {
+    console.error(error);
+    return defaultPrinterSettings;
+  }
+}
+
 type SaleHistoryItem = {
   id: string;
   saleNumber: string;
@@ -126,6 +177,10 @@ function PosPage() {
   const [saleToReprint, setSaleToReprint] = useState<SaleHistoryItem | null>(null);
   const [printableReceipt, setPrintableReceipt] =
   useState<CompletedSaleReceipt | null>(null);
+
+  const [printerSettings, setPrinterSettings] = useState<PrinterSettings>(() =>
+    loadSavedPrinterSettings()
+  );
 
   const [saleToVoid, setSaleToVoid] = useState<SaleHistoryItem | null>(null);
   const [voidReason, setVoidReason] = useState<VoidReason | "">("")
@@ -282,6 +337,22 @@ const loadSellableProducts = useCallback(async () => {
       if (toastTimeoutRef.current) {
         window.clearTimeout(toastTimeoutRef.current);
       }
+    };
+  }, []);
+
+    useEffect(() => {
+    function refreshPrinterSettings() {
+      setPrinterSettings(loadSavedPrinterSettings());
+    }
+
+    refreshPrinterSettings();
+
+    window.addEventListener("focus", refreshPrinterSettings);
+    window.addEventListener("storage", refreshPrinterSettings);
+
+    return () => {
+      window.removeEventListener("focus", refreshPrinterSettings);
+      window.removeEventListener("storage", refreshPrinterSettings);
     };
   }, []);
 
@@ -573,16 +644,36 @@ function buildReceiptFromSale(sale: SaleHistoryItem): CompletedSaleReceipt {
   };
 }
 
+function startBrowserReceiptPrint(
+  receipt: CompletedSaleReceipt,
+  options: { clearAfterPrint?: boolean } = {}
+) {
+  setPrintableReceipt(receipt);
+
+  if (printerSettings.receiptCopies > 1) {
+    showToast(
+      `Printer setting is ${printerSettings.receiptCopies} copies. In browser preview, confirm copies in the print dialog.`,
+      "info"
+    );
+  }
+
+  window.setTimeout(() => {
+    window.print();
+  }, 150);
+
+  if (options.clearAfterPrint) {
+    window.setTimeout(() => {
+      setPrintableReceipt(null);
+    }, 1200);
+  }
+}
+
 function printReceipt() {
   if (!completedSaleReceipt) {
     return;
   }
 
-  setPrintableReceipt(completedSaleReceipt);
-
-  window.setTimeout(() => {
-    window.print();
-  }, 150);
+  startBrowserReceiptPrint(completedSaleReceipt);
 }
 
 function requestVoidSale(sale: SaleHistoryItem) {
@@ -776,17 +867,12 @@ function confirmReprintSale() {
     return;
   }
 
-  setPrintableReceipt(buildReceiptFromSale(saleToReprint));
+  const receiptToPrint = buildReceiptFromSale(saleToReprint);
+
   setSelectedSale(null);
   setSaleToReprint(null);
 
-  window.setTimeout(() => {
-    window.print();
-  }, 200);
-
-  window.setTimeout(() => {
-    setPrintableReceipt(null);
-  }, 1200);
+  startBrowserReceiptPrint(receiptToPrint, { clearAfterPrint: true });
 }
 
 function requestReprintSale(sale: SaleHistoryItem) {
@@ -1009,17 +1095,23 @@ const newStock = previousStock - requirement.requiredAmount;
       });
     });
 
-    setCompletedSaleReceipt({
-  saleNumber,
-  receiptDateText: saleDateText,
-  totalAmount: cartTotal,
-  totalItems: cartItems.reduce((total, item) => total + item.quantity, 0),
-  paymentMethod,
-  cashReceived: paymentMethod === "Cash" ? cashReceivedAmount : undefined,
-  changeAmount: paymentMethod === "Cash" ? changeAmount : undefined,
-  orderNote: orderNote.trim(),
-  items: cartItems,
-});
+        const completedReceipt: CompletedSaleReceipt = {
+      saleNumber,
+      receiptDateText: saleDateText,
+      totalAmount: cartTotal,
+      totalItems: cartItems.reduce((total, item) => total + item.quantity, 0),
+      paymentMethod,
+      cashReceived: paymentMethod === "Cash" ? cashReceivedAmount : undefined,
+      changeAmount: paymentMethod === "Cash" ? changeAmount : undefined,
+      orderNote: orderNote.trim(),
+      items: cartItems,
+    };
+
+    setCompletedSaleReceipt(completedReceipt);
+
+    if (printerSettings.autoPrintAfterSale) {
+      startBrowserReceiptPrint(completedReceipt);
+    }
 
     setCartItems([]);
     setOrderNote("");
@@ -1975,6 +2067,15 @@ const newStock = previousStock - requirement.requiredAmount;
                     </div>
                   </>
                 )}
+            </div>
+
+            <div className="pos-printer-settings-note">
+              <span>Printer Settings</span>
+              <strong>
+                {printerSettings.paperSize} • {printerSettings.receiptCopies}{" "}
+                {printerSettings.receiptCopies === 1 ? "copy" : "copies"} •{" "}
+                {printerSettings.autoPrintAfterSale ? "Auto-print on" : "Auto-print off"}
+              </strong>
             </div>
 
             {completedSaleReceipt.orderNote && (
