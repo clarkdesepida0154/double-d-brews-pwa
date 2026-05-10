@@ -39,6 +39,8 @@ type ManagedUser = {
   createdAt?: FirestoreDateValue;
 };
 
+type ActivityMetadata = Record<string, unknown>;
+
 type ActivityLog = {
   id: string;
   actionType: string;
@@ -48,7 +50,7 @@ type ActivityLog = {
   targetId: string;
   targetName: string;
   description: string;
-  metadataText: string;
+  metadata: ActivityMetadata;
   createdAtText: string;
   createdAt?: FirestoreDateValue;
 };
@@ -220,6 +222,66 @@ function getActionLabel(actionType: string) {
   return "System";
 }
 
+function formatMetadataLabel(key: string) {
+  const labels: Record<string, string> = {
+    paperSize: "Paper Size",
+    receiptCopies: "Receipt Copies",
+    autoPrintAfterSale: "Auto Print",
+    printerMode: "Printer Mode",
+    email: "Email",
+    saleNumber: "Sale Number",
+    totalAmount: "Total Amount",
+    paymentMethod: "Payment Method",
+    itemCount: "Total Items",
+    ingredientName: "Ingredient",
+    quantityAdded: "Quantity Added",
+    unit: "Unit",
+  };
+
+  return labels[key] || key.replace(/([A-Z])/g, " $1").replace(/^./, (letter) =>
+    letter.toUpperCase()
+  );
+}
+
+function formatMetadataValue(key: string, value: unknown) {
+  if (typeof value === "boolean") {
+    return value ? "Enabled" : "Disabled";
+  }
+
+  if (key === "receiptCopies" && typeof value === "number") {
+    return `${value} ${value === 1 ? "copy" : "copies"}`;
+  }
+
+  if (key === "printerMode" && typeof value === "string") {
+    if (value === "browser-preview") {
+      return "Browser Preview";
+    }
+
+    if (value === "android-bluetooth") {
+      return "Android Bluetooth";
+    }
+  }
+
+  if (key === "totalAmount" && typeof value === "number") {
+    return `₱${value.toFixed(2)}`;
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value);
+  }
+
+  return "";
+}
+
+function getReadableActivityDetails(activityLog: ActivityLog) {
+  return Object.entries(activityLog.metadata)
+    .map(([key, value]) => ({
+      label: formatMetadataLabel(key),
+      value: formatMetadataValue(key, value),
+    }))
+    .filter((detail) => detail.value.trim().length > 0);
+}
+
 function UserManagementPage() {
   const [activeTab, setActiveTab] = useState<UserManagementTab>("users");
 
@@ -304,12 +366,10 @@ function UserManagementPage() {
           targetId: String(data.targetId || ""),
           targetName: String(data.targetName || ""),
           description: String(data.description || "No description saved."),
-          metadataText:
-            typeof data.metadata === "string"
-              ? data.metadata
-              : data.metadata
-                ? JSON.stringify(data.metadata)
-                : "",
+          metadata:
+            data.metadata && typeof data.metadata === "object"
+              ? (data.metadata as ActivityMetadata)
+              : {},
           createdAtText: String(data.createdAtText || ""),
           createdAt: data.createdAt,
         };
@@ -364,14 +424,19 @@ function UserManagementPage() {
 
     return activityLogs.filter((activityLog) => {
       const normalizedAction = normalizeActionType(activityLog.actionType);
+      const readableDetails = getReadableActivityDetails(activityLog)
+        .map((detail) => `${detail.label} ${detail.value}`)
+        .join(" ")
+        .toLowerCase();
 
       const matchesSearch =
-        !cleanSearchText ||
-        activityLog.actorName.toLowerCase().includes(cleanSearchText) ||
-        activityLog.description.toLowerCase().includes(cleanSearchText) ||
-        activityLog.targetName.toLowerCase().includes(cleanSearchText) ||
-        activityLog.actionType.toLowerCase().includes(cleanSearchText) ||
-        getRoleLabel(activityLog.actorRole).toLowerCase().includes(cleanSearchText);
+      !cleanSearchText ||
+      activityLog.actorName.toLowerCase().includes(cleanSearchText) ||
+      activityLog.description.toLowerCase().includes(cleanSearchText) ||
+      activityLog.targetName.toLowerCase().includes(cleanSearchText) ||
+      activityLog.actionType.toLowerCase().includes(cleanSearchText) ||
+      getRoleLabel(activityLog.actorRole).toLowerCase().includes(cleanSearchText) ||
+      readableDetails.includes(cleanSearchText);
 
       const matchesAction =
         activityActionFilter === "all" ||
@@ -719,21 +784,18 @@ function UserManagementPage() {
                       )}
                     </div>
 
-                    {(activityLog.actorId ||
-                      activityLog.targetId ||
-                      activityLog.metadataText) && (
-                      <div className="activity-card-meta">
-                        {activityLog.actorId && (
-                          <span>Actor ID: {activityLog.actorId}</span>
-                        )}
+                    {getReadableActivityDetails(activityLog).length > 0 && (
+                      <div className="activity-readable-details">
+                        <strong>Activity Details</strong>
 
-                        {activityLog.targetId && (
-                          <span>Target ID: {activityLog.targetId}</span>
-                        )}
-
-                        {activityLog.metadataText && (
-                          <span>Data: {activityLog.metadataText}</span>
-                        )}
+                        <div>
+                          {getReadableActivityDetails(activityLog).map((detail) => (
+                            <span key={`${activityLog.id}-${detail.label}`}>
+                              <small>{detail.label}</small>
+                              <b>{detail.value}</b>
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </article>

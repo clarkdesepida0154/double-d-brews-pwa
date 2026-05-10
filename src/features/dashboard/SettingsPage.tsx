@@ -3,6 +3,7 @@ import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../../firebase/config";
 import type { UserProfile } from "../../types/UserProfile";
 import "./SettingsPage.css";
+import { writeActivityLog } from "../../utils/activityLogUtils";
 
 type SettingsPageProps = {
   userRole?: "developer" | "owner" | "staff";
@@ -108,6 +109,17 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
     try {
       await sendPasswordResetEmail(auth, userProfile.email);
 
+      await writeActivityLog({
+        actor: userProfile,
+        actionType: "settings.account.password_reset_email_sent",
+        targetId: userProfile.uid,
+        targetName: userProfile.email,
+        description: `Password reset email was sent to ${userProfile.email}.`,
+        metadata: {
+          email: userProfile.email,
+        },
+      });
+
       setAccountMessageType("success");
       setAccountMessage(
         `Password reset email sent to ${userProfile.email}. Please check the inbox or spam folder.`
@@ -148,6 +160,24 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
         PRINTER_SETTINGS_KEY,
         JSON.stringify(printerSettings)
       );
+
+      writeActivityLog({
+        actor: userProfile,
+        actionType: "settings.printer.updated",
+        targetId: userProfile.uid,
+        targetName: "Thermal Receipt Printer",
+        description: `Printer settings were updated to ${printerSettings.paperSize}, ${printerSettings.receiptCopies} ${
+          printerSettings.receiptCopies === 1 ? "copy" : "copies"
+        }, auto-print ${
+          printerSettings.autoPrintAfterSale ? "enabled" : "disabled"
+        }.`,
+        metadata: {
+          paperSize: printerSettings.paperSize,
+          receiptCopies: printerSettings.receiptCopies,
+          autoPrintAfterSale: printerSettings.autoPrintAfterSale,
+          printerMode: printerSettings.printerMode,
+        },
+      });
 
       setPrinterMessageType("success");
       setPrinterMessage("Printer preferences saved successfully on this device.");
