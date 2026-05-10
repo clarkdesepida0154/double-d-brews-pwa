@@ -586,7 +586,7 @@ function DashboardPage({ userProfile }: DashboardPageProps) {
           </>
         )}
 
-        {currentPage === "pos" && <PosPage />}
+        {currentPage === "pos" && <PosPage userProfile={userProfile} />}
         {currentPage === "inventory" && allowedPages.includes("inventory") && (
           <InventoryPage userRole={userRole} />
         )}

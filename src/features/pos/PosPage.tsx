@@ -11,6 +11,8 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../../firebase/config";
+import type { UserProfile } from "../../types/UserProfile";
+import { writeActivityLog } from "../../utils/activityLogUtils";
 import "./PosPage.css";
 
 type PosProductSize = {
@@ -54,6 +56,9 @@ type CompletedSaleReceipt = {
 
 type PosTab = "new-order" | "sales-history";
 type ToastType = "success" | "error" | "info";
+type PosPageProps = {
+  userProfile: UserProfile;
+};
 
 type PrinterPaperSize = "58mm" | "80mm";
 
@@ -147,7 +152,7 @@ const VOID_REASONS: VoidReason[] = [
   "Other",
 ];
 
-function PosPage() {
+function PosPage({ userProfile }: PosPageProps) {
   const [sellableSizes, setSellableSizes] = useState<PosProductSize[]>([]);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("All");
@@ -843,6 +848,23 @@ async function handleVoidSaleSubmit(event: React.FormEvent<HTMLFormElement>) {
     setVoidNote("");
     setSelectedSale(null);
 
+    await writeActivityLog({
+      actor: userProfile,
+      actionType: "pos.sale.voided",
+      targetId: saleBeingVoided.id,
+      targetName: saleBeingVoided.saleNumber,
+      description: `Voided sale ${saleBeingVoided.saleNumber}. Reason: ${selectedVoidReason}. Stock was restored.`,
+      metadata: {
+        saleNumber: saleBeingVoided.saleNumber,
+        totalAmount: saleBeingVoided.totalAmount,
+        paymentMethod: saleBeingVoided.paymentMethod,
+        totalItems: saleBeingVoided.totalItems,
+        voidReason: selectedVoidReason,
+        voidNote: cleanedVoidNote || "No note entered",
+        stockRestored: true,
+      },
+    });
+
     showToast("Sale voided successfully. Stock has been restored.", "success");
 
     await loadSellableProducts();
@@ -867,12 +889,34 @@ function confirmReprintSale() {
     return;
   }
 
-  const receiptToPrint = buildReceiptFromSale(saleToReprint);
+  const saleBeingReprinted = saleToReprint;
 
+  setPrintableReceipt(buildReceiptFromSale(saleBeingReprinted));
   setSelectedSale(null);
   setSaleToReprint(null);
 
-  startBrowserReceiptPrint(receiptToPrint, { clearAfterPrint: true });
+  writeActivityLog({
+    actor: userProfile,
+    actionType: "pos.receipt.reprinted",
+    targetId: saleBeingReprinted.id,
+    targetName: saleBeingReprinted.saleNumber,
+    description: `Reprinted receipt for ${saleBeingReprinted.saleNumber}. No sale or stock changes were made.`,
+    metadata: {
+      saleNumber: saleBeingReprinted.saleNumber,
+      totalAmount: saleBeingReprinted.totalAmount,
+      paymentMethod: saleBeingReprinted.paymentMethod,
+      totalItems: saleBeingReprinted.totalItems,
+      stockMovement: "No stock movement",
+    },
+  });
+
+  window.setTimeout(() => {
+    window.print();
+  }, 200);
+
+  window.setTimeout(() => {
+    setPrintableReceipt(null);
+  }, 1200);
 }
 
 function requestReprintSale(sale: SaleHistoryItem) {
@@ -946,6 +990,7 @@ function showToast(messageText: string, type: ToastType = "info") {
 
   const saleNumber = `SALE-${Date.now()}`;
   const saleDateText = formatCurrentReceiptDate();
+  let completedSaleId = "";
 
   try {
     await runTransaction(db, async (transaction) => {
@@ -1032,6 +1077,7 @@ function showToast(messageText: string, type: ToastType = "info") {
       });
 
       const saleRef = doc(collection(db, "sales"));
+      completedSaleId = saleRef.id;
 
       transaction.set(saleRef, {
         saleNumber,
@@ -1106,6 +1152,24 @@ const newStock = previousStock - requirement.requiredAmount;
       orderNote: orderNote.trim(),
       items: cartItems,
     };
+
+    await writeActivityLog({
+      actor: userProfile,
+      actionType: "pos.sale.completed",
+      targetId: completedSaleId || saleNumber,
+      targetName: saleNumber,
+      description: `Completed sale ${saleNumber} for ₱${cartTotal.toFixed(
+        2
+      )} using ${paymentMethod}.`,
+      metadata: {
+        saleNumber,
+        totalAmount: cartTotal,
+        paymentMethod,
+        totalItems: cartItems.reduce((total, item) => total + item.quantity, 0),
+        cashReceived: paymentMethod === "Cash" ? cashReceivedAmount : null,
+        changeAmount: paymentMethod === "Cash" ? changeAmount : null,
+      },
+    });
 
     setCompletedSaleReceipt(completedReceipt);
 

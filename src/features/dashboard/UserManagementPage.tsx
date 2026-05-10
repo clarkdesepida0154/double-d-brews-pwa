@@ -236,6 +236,13 @@ function formatMetadataLabel(key: string) {
     ingredientName: "Ingredient",
     quantityAdded: "Quantity Added",
     unit: "Unit",
+    totalItems: "Total Items",
+    cashReceived: "Cash Received",
+    changeAmount: "Change",
+    voidReason: "Void Reason",
+    voidNote: "Void Note",
+    stockRestored: "Stock Restored",
+    stockMovement: "Stock Movement",
   };
 
   return labels[key] || key.replace(/([A-Z])/g, " $1").replace(/^./, (letter) =>
@@ -245,6 +252,10 @@ function formatMetadataLabel(key: string) {
 
 function formatMetadataValue(key: string, value: unknown) {
   if (typeof value === "boolean") {
+    if (key === "stockRestored") {
+      return value ? "Yes, stock was restored" : "No";
+    }
+
     return value ? "Enabled" : "Disabled";
   }
 
@@ -262,7 +273,12 @@ function formatMetadataValue(key: string, value: unknown) {
     }
   }
 
-  if (key === "totalAmount" && typeof value === "number") {
+  if (
+    (key === "totalAmount" ||
+      key === "cashReceived" ||
+      key === "changeAmount") &&
+    typeof value === "number"
+  ) {
     return `₱${value.toFixed(2)}`;
   }
 
