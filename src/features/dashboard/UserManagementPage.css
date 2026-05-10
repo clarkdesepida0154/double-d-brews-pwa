@@ -405,3 +405,177 @@
     height: 40px;
   }
 }
+
+/* =========================
+   Activity Logs v1
+========================= */
+
+.user-management-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  border-radius: 18px;
+  background: rgba(244, 231, 211, 0.65);
+  padding: 6px;
+}
+
+.user-management-tabs button {
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: #4a2c1a;
+  padding: 12px;
+  font: inherit;
+  font-weight: 1000;
+  cursor: pointer;
+}
+
+.user-management-tabs button.active {
+  background: #4f2f1c;
+  color: #fff8ee;
+  box-shadow: 0 10px 20px rgba(92, 55, 31, 0.16);
+}
+
+.activity-summary-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.activity-toolbar {
+  grid-template-columns: minmax(0, 1fr) 190px;
+}
+
+.activity-list {
+  display: grid;
+  gap: 12px;
+}
+
+.activity-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(92, 55, 31, 0.12);
+  border-radius: 20px;
+  background: #fffaf2;
+  padding: 14px;
+}
+
+.activity-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.activity-card-top h4 {
+  margin: 8px 0 0;
+  color: #321d12;
+  font-size: 16px;
+  font-weight: 1000;
+  line-height: 1.35;
+}
+
+.activity-card-top > strong {
+  flex-shrink: 0;
+  color: #76563b;
+  font-size: 12px;
+  font-weight: 1000;
+  text-align: right;
+}
+
+.activity-action-badge {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 6px 9px;
+  font-size: 11px;
+  font-weight: 1000;
+  text-transform: uppercase;
+}
+
+.activity-action-badge.sale {
+  background: rgba(226, 245, 229, 0.95);
+  color: #286a36;
+}
+
+.activity-action-badge.void {
+  background: rgba(255, 226, 220, 0.95);
+  color: #9f261a;
+}
+
+.activity-action-badge.inventory {
+  background: rgba(255, 244, 216, 0.95);
+  color: #8a5a12;
+}
+
+.activity-action-badge.settings {
+  background: rgba(244, 231, 211, 0.95);
+  color: #5c371f;
+}
+
+.activity-action-badge.user {
+  background: rgba(230, 216, 255, 0.95);
+  color: #4b2c7a;
+}
+
+.activity-action-badge.system {
+  background: rgba(232, 232, 232, 0.95);
+  color: #4a4a4a;
+}
+
+.activity-card-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.activity-card-details span,
+.activity-card-meta span {
+  border-radius: 999px;
+  background: rgba(244, 231, 211, 0.72);
+  color: #76563b;
+  padding: 6px 9px;
+  font-size: 12px;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.activity-card-details strong {
+  color: #321d12;
+  font-weight: 1000;
+}
+
+.activity-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-top: 1px solid rgba(92, 55, 31, 0.1);
+  padding-top: 10px;
+}
+
+@media (max-width: 1100px) {
+  .activity-summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 820px) {
+  .activity-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .activity-card-top {
+    display: grid;
+  }
+
+  .activity-card-top > strong {
+    text-align: left;
+  }
+}
+
+@media (max-width: 520px) {
+  .user-management-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .activity-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
