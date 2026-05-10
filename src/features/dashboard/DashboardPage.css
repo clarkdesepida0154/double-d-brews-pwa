@@ -369,3 +369,207 @@
     margin-left: 18px;
   }
 }
+
+/* =========================
+   Dashboard Owner Insights Polish
+========================= */
+
+.dashboard-insight-message {
+  margin: 14px 0 0;
+  border: 1px solid rgba(159, 38, 26, 0.22);
+  border-radius: 16px;
+  background: rgba(255, 226, 220, 0.92);
+  color: #7a1c13;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.4;
+}
+
+.dashboard-insights-panel {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+  border: 1px solid rgba(92, 55, 31, 0.12);
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at top right, rgba(233, 190, 128, 0.22), transparent 38%),
+    linear-gradient(180deg, #fffdf9 0%, #fff3df 100%);
+  box-shadow: 0 16px 34px rgba(92, 55, 31, 0.08);
+  padding: 20px;
+}
+
+.dashboard-insights-panel .dashboard-kicker {
+  margin: 0 0 8px;
+  color: #9b6a3d;
+  font-size: 12px;
+  font-weight: 1000;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.dashboard-insights-panel .dashboard-section-title {
+  margin: 0;
+  color: #321d12;
+  font-size: 24px;
+  font-weight: 1000;
+  line-height: 1.12;
+}
+
+.dashboard-insights-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dashboard-insight-card {
+  border: 1px solid rgba(92, 55, 31, 0.12);
+  border-radius: 20px;
+  background: rgba(255, 250, 242, 0.94);
+  padding: 15px;
+  box-shadow: 0 10px 22px rgba(92, 55, 31, 0.06);
+}
+
+.dashboard-insight-card strong {
+  display: block;
+  color: #321d12;
+  font-size: 15px;
+  font-weight: 1000;
+  line-height: 1.25;
+}
+
+.dashboard-insight-card p {
+  margin: 7px 0 0;
+  color: #76563b;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.dashboard-insight-card.good {
+  border-color: rgba(40, 106, 54, 0.16);
+  background: rgba(226, 245, 229, 0.92);
+}
+
+.dashboard-insight-card.good strong {
+  color: #286a36;
+}
+
+.dashboard-insight-card.warning {
+  border-color: rgba(154, 104, 25, 0.2);
+  background: rgba(255, 244, 216, 0.95);
+}
+
+.dashboard-insight-card.warning strong {
+  color: #8a5a12;
+}
+
+.dashboard-refresh-insights-button {
+  width: 100%;
+  border: 1px solid rgba(92, 55, 31, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 252, 246, 0.96);
+  color: #4a2c1a;
+  padding: 13px 16px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 1000;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(92, 55, 31, 0.08);
+}
+
+.dashboard-refresh-insights-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* =========================
+   Mobile Dashboard Refinement
+========================= */
+
+@media (max-width: 760px) {
+  .dashboard-insights-panel {
+    gap: 14px;
+    margin-top: 18px;
+    border-radius: 24px;
+    padding: 18px;
+  }
+
+  .dashboard-insights-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .dashboard-insight-card {
+    border-radius: 18px;
+    padding: 14px;
+  }
+
+  .dashboard-insights-panel .dashboard-section-title {
+    font-size: 22px;
+  }
+
+  .dashboard-refresh-insights-button {
+    min-height: 48px;
+  }
+}
+
+@media (max-width: 420px) {
+  .dashboard-hero {
+    border-radius: 24px;
+  }
+
+  .dashboard-stats-grid {
+    gap: 12px;
+  }
+
+  .dashboard-stat-card {
+    border-radius: 18px;
+    padding: 14px;
+  }
+
+  .dashboard-stat-label {
+    font-size: 12px;
+    line-height: 1.25;
+  }
+
+  .dashboard-stat-value {
+    font-size: 22px;
+    line-height: 1.1;
+  }
+
+  .dashboard-insights-panel {
+    padding: 16px;
+  }
+}
+
+/* =========================
+   Role Access Control
+========================= */
+
+.dashboard-access-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(159, 38, 26, 0.22);
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at top right, rgba(233, 190, 128, 0.22), transparent 38%),
+    linear-gradient(180deg, #fffdf9 0%, #fff3df 100%);
+  box-shadow: 0 16px 34px rgba(92, 55, 31, 0.08);
+  padding: 20px;
+}
+
+.dashboard-access-card p {
+  margin: 0;
+  color: #76563b;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+@media (max-width: 640px) {
+  .dashboard-access-card {
+    border-radius: 24px;
+    padding: 18px;
+  }
+}

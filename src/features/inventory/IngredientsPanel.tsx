@@ -47,7 +47,11 @@ const usageUnits: UsageUnit[] = [
   "oz",
 ];
 
-function IngredientsPanel() {
+type IngredientsPanelProps = {
+  isStaffMode?: boolean;
+};
+
+function IngredientsPanel({ isStaffMode = false }: IngredientsPanelProps) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [ingredientStatusFilter, setIngredientStatusFilter] = useState<"active" | "inactive">("active");
@@ -120,9 +124,15 @@ function IngredientsPanel() {
     }
   }, [ingredientStatusFilter]);
 
-  useEffect(() => {
+    useEffect(() => {
     loadIngredients();
   }, [loadIngredients]);
+
+  useEffect(() => {
+    if (isStaffMode && ingredientStatusFilter === "inactive") {
+      setIngredientStatusFilter("active");
+    }
+  }, [isStaffMode, ingredientStatusFilter]);
 
   const filteredIngredients = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
@@ -193,6 +203,11 @@ function IngredientsPanel() {
   }
 
   function openEditForm() {
+    if (isStaffMode) {
+      setFormMessage("Staff operators can restock ingredients, but cannot edit setup details.");
+      return;
+    }
+
     if (!selectedIngredient) {
       return;
     }
@@ -252,6 +267,11 @@ function IngredientsPanel() {
   }
 
   async function handleDeactivateIngredient() {
+    if (isStaffMode) {
+      setFormMessage("Staff operators cannot deactivate ingredients.");
+      return;
+    }
+
     if (!selectedIngredient) {
       return;
     }
@@ -281,6 +301,11 @@ function IngredientsPanel() {
   }
 
   async function handleRestoreIngredient() {
+    if (isStaffMode) {
+      setFormMessage("Staff operators cannot restore inactive ingredients.");
+      return;
+    }
+
     if (!selectedIngredient) {
       return;
     }
@@ -307,6 +332,11 @@ function IngredientsPanel() {
 
   async function handleUpdateIngredient(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (isStaffMode) {
+      setFormMessage("Staff operators cannot edit ingredient setup details.");
+      return;
+    }
 
     if (!selectedIngredient) {
       return;
@@ -388,6 +418,11 @@ function IngredientsPanel() {
 
   async function handleAddIngredient(event: React.FormEvent<HTMLFormElement>) {
       event.preventDefault();
+
+      if (isStaffMode) {
+        setFormMessage("Staff operators cannot add new ingredients.");
+        return;
+      }
 
       const validationError = validateIngredientForm();
 
@@ -477,7 +512,7 @@ function IngredientsPanel() {
       }
     }
 
-  if (isFormOpen) {
+  if (isFormOpen && !isStaffMode) {
     return (
       <section className="ingredients-panel">
         <div className="inventory-panel-heading inventory-panel-heading--compact">
@@ -644,11 +679,16 @@ function IngredientsPanel() {
       <div className="inventory-panel-heading">
         <div>
           <h3>Ingredients</h3>
-          <p>Search, view, and manage raw materials used in recipes.</p>
+            <p>
+              {isStaffMode
+                ? "View ingredient stock and record restocks for daily operations."
+                : "Search, view, and manage raw materials used in recipes."}
+          </p>
         </div>
       </div>
 
-      <div className="ingredient-status-filter">
+            {!isStaffMode && (
+        <div className="ingredient-status-filter">
           <button
             type="button"
             className={ingredientStatusFilter === "active" ? "active" : ""}
@@ -673,6 +713,7 @@ function IngredientsPanel() {
             Inactive
           </button>
         </div>
+      )}
 
       <div className="inventory-list-toolbar">
         <div className="inventory-search-wrap">
@@ -684,16 +725,18 @@ function IngredientsPanel() {
           />
         </div>
 
-        <button
-          className="primary-inventory-button compact"
-          type="button"
-          onClick={() => {
-            resetForm();
-            setIsFormOpen(true);
-          }}
-        >
-          + Add Ingredient
-        </button>
+        {!isStaffMode && (
+          <button
+            className="primary-inventory-button compact"
+            type="button"
+            onClick={() => {
+              resetForm();
+              setIsFormOpen(true);
+            }}
+          >
+            + Add Ingredient
+          </button>
+        )}
       </div>
 
       {formMessage && <p className="inventory-form-message">{formMessage}</p>}
@@ -750,9 +793,19 @@ function IngredientsPanel() {
 
                 <div className="ingredient-card-footer">
                   <span>
-                    Cost per {ingredient.usageUnit}:{" "}
-                    <strong>₱{ingredient.costPerUsageUnit.toFixed(2)}</strong>
+                    {isStaffMode ? (
+                      <>
+                        Low alert: <strong>{ingredient.minThreshold} {ingredient.usageUnit}s</strong>
+                      </>
+                    ) : (
+                      <>
+                        Cost per {ingredient.usageUnit}:{" "}
+                        <strong>₱{ingredient.costPerUsageUnit.toFixed(2)}</strong>
+                      </>
+                    )}
                   </span>
+
+                  <span className="ingredient-card-tap-hint">Tap to view</span>
 
                   <span className="ingredient-card-tap-hint">Tap to view</span>
                 </div>
@@ -797,21 +850,25 @@ function IngredientsPanel() {
                     </strong>
                   </div>
 
-                  <div>
-                    <span>Purchase Cost</span>
-                    <strong>
-                      ₱{selectedIngredient.purchaseCost.toFixed(2)} /{" "}
-                      {selectedIngredient.purchaseUnit}
-                    </strong>
-                  </div>
+                   {!isStaffMode && (
+                    <>
+                      <div>
+                        <span>Purchase Cost</span>
+                        <strong>
+                          ₱{selectedIngredient.purchaseCost.toFixed(2)} /{" "}
+                          {selectedIngredient.purchaseUnit}
+                        </strong>
+                      </div>
 
-                  <div>
-                    <span>Usage Cost</span>
-                    <strong>
-                      ₱{selectedIngredient.costPerUsageUnit.toFixed(2)} /{" "}
-                      {selectedIngredient.usageUnit}
-                    </strong>
-                  </div>
+                      <div>
+                        <span>Usage Cost</span>
+                        <strong>
+                          ₱{selectedIngredient.costPerUsageUnit.toFixed(2)} /{" "}
+                          {selectedIngredient.usageUnit}
+                        </strong>
+                      </div>
+                    </>
+                  )}
 
                   <div>
                     <span>Low Stock Alert</span>
@@ -839,7 +896,7 @@ function IngredientsPanel() {
                   </div>
                 </div>
 
-                {!isRestockOpen && !isEditOpen && selectedIngredient.isActive && (
+                                {!isRestockOpen && !isEditOpen && selectedIngredient.isActive && (
                   <div className="ingredient-modal-actions">
                     <button
                       type="button"
@@ -849,25 +906,29 @@ function IngredientsPanel() {
                       Restock
                     </button>
 
-                    <button
-                      type="button"
-                      className="secondary-inventory-button"
-                      onClick={openEditForm}
-                    >
-                      Edit
-                    </button>
+                    {!isStaffMode && (
+                      <>
+                        <button
+                          type="button"
+                          className="secondary-inventory-button"
+                          onClick={openEditForm}
+                        >
+                          Edit
+                        </button>
 
-                    <button
-                      type="button"
-                      className="danger-inventory-button"
-                      onClick={() => setIsDeactivateConfirmOpen(true)}
-                    >
-                      Deactivate
-                    </button>
+                        <button
+                          type="button"
+                          className="danger-inventory-button"
+                          onClick={() => setIsDeactivateConfirmOpen(true)}
+                        >
+                          Deactivate
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
 
-                {!isRestockOpen && !selectedIngredient.isActive && (
+                {!isStaffMode && !isRestockOpen && !selectedIngredient.isActive && (
                   <div className="ingredient-modal-actions ingredient-modal-actions--restore">
                     <button
                       type="button"
@@ -885,7 +946,7 @@ function IngredientsPanel() {
             </div>
           )}
 
-          {isEditOpen && selectedIngredient && (
+          {!isStaffMode && isEditOpen && selectedIngredient && (
             <div
               className="edit-modal-overlay"
               onClick={() => {
@@ -1119,7 +1180,7 @@ function IngredientsPanel() {
             </div>
           )}
 
-          {isDeactivateConfirmOpen && selectedIngredient && (
+          {!isStaffMode && isDeactivateConfirmOpen && selectedIngredient && (
             <div
               className="confirm-modal-overlay"
               onClick={() => {

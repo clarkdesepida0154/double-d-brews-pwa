@@ -8,9 +8,24 @@ import RecipesPanel from "./RecipesPanel";
 
 type InventoryTab = "ingredients" | "products" | "recipes" | "low-stock";
 
-function InventoryPage() {
+type InventoryPageProps = {
+  userRole?: "developer" | "owner" | "staff";
+};
+
+function InventoryPage({ userRole = "owner" }: InventoryPageProps) {
   const [activeTab, setActiveTab] = useState<InventoryTab>("ingredients");
   const [isHealthModalOpen, setIsHealthModalOpen] = useState(false);
+
+  const isStaffMode = userRole === "staff";
+
+  function openInventoryTab(tab: InventoryTab) {
+    if (isStaffMode && (tab === "products" || tab === "recipes")) {
+      setActiveTab("ingredients");
+      return;
+    }
+
+    setActiveTab(tab);
+  }
 
   return (
     <section className="inventory-page">
@@ -18,66 +33,76 @@ function InventoryPage() {
         <p className="inventory-kicker">Inventory & Recipes</p>
         <h2>Manage store items</h2>
         <p>
-          Add ingredients first, then create products and recipe mappings for POS deduction.
+          {isStaffMode
+            ? "View ingredients, track low stock, and record restocks for daily operations."
+            : "Add ingredients first, then create products and recipe mappings for POS deduction."}
         </p>
       </div>
 
-      <div className="inventory-health-desktop">
-        <InventoryHealthSummary />
-      </div>
+      {!isStaffMode && (
+        <div className="inventory-health-desktop">
+          <InventoryHealthSummary />
+        </div>
+      )}
 
-      <div className="inventory-mobile-actions">
-        <button
-          type="button"
-          className="primary-inventory-button inventory-health-mobile-trigger"
-          onClick={() => setIsHealthModalOpen(true)}
-        >
-          View Inventory Health
-        </button>
-      </div>
+      {!isStaffMode && (
+        <div className="inventory-mobile-actions">
+          <button
+            type="button"
+            className="primary-inventory-button inventory-health-mobile-trigger"
+            onClick={() => setIsHealthModalOpen(true)}
+          >
+            View Inventory Health
+          </button>
+        </div>
+      )}
 
       <div className="inventory-tabs">
         <button
           className={`inventory-tab-button ${activeTab === "ingredients" ? "active" : ""}`}
           type="button"
-          onClick={() => setActiveTab("ingredients")}
+          onClick={() => openInventoryTab("ingredients")}
         >
           Ingredients
         </button>
 
-        <button
-          className={`inventory-tab-button ${activeTab === "products" ? "active" : ""}`}
-          type="button"
-          onClick={() => setActiveTab("products")}
-        >
-          Products
-        </button>
+        {!isStaffMode && (
+          <button
+            className={`inventory-tab-button ${activeTab === "products" ? "active" : ""}`}
+            type="button"
+            onClick={() => openInventoryTab("products")}
+          >
+            Products
+          </button>
+        )}
 
-        <button
-          className={`inventory-tab-button ${activeTab === "recipes" ? "active" : ""}`}
-          type="button"
-          onClick={() => setActiveTab("recipes")}
-        >
-          Recipes
-        </button>
+        {!isStaffMode && (
+          <button
+            className={`inventory-tab-button ${activeTab === "recipes" ? "active" : ""}`}
+            type="button"
+            onClick={() => openInventoryTab("recipes")}
+          >
+            Recipes
+          </button>
+        )}
 
         <button
           className={`inventory-tab-button ${activeTab === "low-stock" ? "active" : ""}`}
           type="button"
-          onClick={() => setActiveTab("low-stock")}
+          onClick={() => openInventoryTab("low-stock")}
         >
           Low Stock
         </button>
       </div>
 
       <div className="inventory-panel">
-        {activeTab === "ingredients" && <IngredientsPanel />}
-        {activeTab === "products" && <ProductsPanel />}
-        {activeTab === "recipes" && <RecipesPanel />}
+        {activeTab === "ingredients" && <IngredientsPanel isStaffMode={isStaffMode} />}
+        {activeTab === "products" && !isStaffMode && <ProductsPanel />}
+        {activeTab === "recipes" && !isStaffMode && <RecipesPanel />}
         {activeTab === "low-stock" && <LowStockPanel />}
       </div>
 
-      {isHealthModalOpen && (
+      {!isStaffMode && isHealthModalOpen && (
         <div
           className="inventory-health-modal-overlay"
           onClick={() => setIsHealthModalOpen(false)}
@@ -96,14 +121,15 @@ function InventoryPage() {
               </div>
 
               <button
-                    className="inventory-health-modal-close"
-                    type="button"
-                    onClick={() => setIsHealthModalOpen(false)}
-                    aria-label="Close inventory health summary"
-                  >
-                    ×
-               </button>
+                className="inventory-health-modal-close"
+                type="button"
+                onClick={() => setIsHealthModalOpen(false)}
+                aria-label="Close inventory health summary"
+              >
+                ×
+              </button>
             </div>
+
             <InventoryHealthSummary />
 
             <div className="inventory-health-modal-footer">
