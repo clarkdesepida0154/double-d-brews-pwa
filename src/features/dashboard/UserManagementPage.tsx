@@ -223,34 +223,46 @@ function getActionLabel(actionType: string) {
 }
 
 function formatMetadataLabel(key: string) {
-  const labels: Record<string, string> = {
-    paperSize: "Paper Size",
-    receiptCopies: "Receipt Copies",
-    autoPrintAfterSale: "Auto Print",
-    printerMode: "Printer Mode",
-    email: "Email",
-    saleNumber: "Sale Number",
-    totalAmount: "Total Amount",
-    paymentMethod: "Payment Method",
-    itemCount: "Total Items",
-    ingredientName: "Ingredient",
-    quantityAdded: "Quantity Added",
-    unit: "Unit",
-    totalItems: "Total Items",
-    cashReceived: "Cash Received",
-    changeAmount: "Change",
-    voidReason: "Void Reason",
-    voidNote: "Void Note",
-    stockRestored: "Stock Restored",
-    stockMovement: "Stock Movement",
-    previousStock: "Previous Stock",
-    newStock: "New Stock",
-    purchaseQuantity: "Quantity Added",
-    purchaseUnit: "Purchase Unit",
-    usageAmountAdded: "Stock Added",
-    usageUnit: "Stock Unit",
-    restockSource: "Restock Source",
-    restockNote: "Restock Note",
+    const labels: Record<string, string> = {
+      paperSize: "Paper Size",
+      receiptCopies: "Receipt Copies",
+      autoPrintAfterSale: "Auto Print",
+      printerMode: "Printer Mode",
+      email: "Email",
+
+      saleNumber: "Sale Number",
+      totalAmount: "Total Amount",
+      paymentMethod: "Payment Method",
+      itemCount: "Total Items",
+      totalItems: "Total Items",
+      cashReceived: "Cash Received",
+      changeAmount: "Change",
+      voidReason: "Void Reason",
+      voidNote: "Void Note",
+      stockRestored: "Stock Restored",
+      stockMovement: "Stock Movement",
+
+      ingredientName: "Ingredient",
+      previousIngredientName: "Previous Name",
+      newIngredientName: "New Name",
+      ingredientStatus: "Ingredient Status",
+      purchaseQuantity: "Quantity Added",
+      quantityAdded: "Quantity Added",
+      purchaseUnit: "Purchase Unit",
+      usageUnit: "Stock Unit",
+      usagePerPurchaseUnit: "Usage Per Purchase Unit",
+      usageAmountAdded: "Stock Added",
+      purchaseCost: "Purchase Cost",
+      costPerUsageUnit: "Cost Per Usage Unit",
+      currentStock: "Current Stock",
+      previousStock: "Previous Stock",
+      newStock: "New Stock",
+      minThreshold: "Low Stock Level",
+      restockSource: "Restock Source",
+      restockNote: "Restock Note",
+      actionSource: "Action Source",
+
+      unit: "Unit",
   };
 
   return labels[key] || key.replace(/([A-Z])/g, " $1").replace(/^./, (letter) =>
@@ -284,10 +296,24 @@ function formatMetadataValue(key: string, value: unknown) {
   if (
     (key === "totalAmount" ||
       key === "cashReceived" ||
-      key === "changeAmount") &&
+      key === "changeAmount" ||
+      key === "purchaseCost" ||
+      key === "costPerUsageUnit") &&
     typeof value === "number"
   ) {
     return `₱${value.toFixed(2)}`;
+  }
+
+  if (
+    (key === "currentStock" ||
+      key === "minThreshold" ||
+      key === "previousStock" ||
+      key === "newStock" ||
+      key === "usageAmountAdded" ||
+      key === "usagePerPurchaseUnit") &&
+    typeof value === "number"
+  ) {
+    return String(value);
   }
 
   if (

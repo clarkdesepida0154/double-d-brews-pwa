@@ -4,7 +4,6 @@ import {
   collection,
   doc,
   getDocs,
-  increment,
   query,
   serverTimestamp,
   updateDoc,
@@ -27,6 +26,47 @@ import {
 function normalizeKey(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
+
+async function findIngredientDuplicateByNameKey(
+  nameKey: string,
+  currentIngredientId = ""
+) {
+  const allIngredientsSnapshot = await getDocs(collection(db, "ingredients"));
+
+  return allIngredientsSnapshot.docs.find((ingredientDoc) => {
+    if (ingredientDoc.id === currentIngredientId) {
+      return false;
+    }
+
+    const ingredientData = ingredientDoc.data();
+
+    const existingNameKey =
+      ingredientData.nameKey || normalizeKey(ingredientData.name || "");
+
+    return existingNameKey === nameKey;
+  });
+}
+
+async function findActiveIngredientDuplicateByNameKey(
+  nameKey: string,
+  currentIngredientId = ""
+) {
+  const allIngredientsSnapshot = await getDocs(collection(db, "ingredients"));
+
+  return allIngredientsSnapshot.docs.find((ingredientDoc) => {
+    if (ingredientDoc.id === currentIngredientId) {
+      return false;
+    }
+
+    const ingredientData = ingredientDoc.data();
+
+    const existingNameKey =
+      ingredientData.nameKey || normalizeKey(ingredientData.name || "");
+
+    return existingNameKey === nameKey && ingredientData.isActive !== false;
+  });
+}
+
 const purchaseUnits: PurchaseUnit[] = [
   "bag",
   "bottle",
@@ -253,12 +293,71 @@ function IngredientsPanel({
       const previousStock = selectedIngredient.currentStock;
       const newStock = previousStock + addedStock;
 
+      const nameKey = normalizeKey(selectedIngredient.name);
+
+      const activeDuplicate = await findActiveIngredientDuplicateByNameKey(
+        nameKey,
+        selectedIngredient.id
+      );
+
+      if (activeDuplicate) {
+        const activeDuplicateData = activeDuplicate.data();
+
+        setFormMessage(
+          `Cannot restore ${selectedIngredient.name}. Active ingredient "${activeDuplicateData.name}" already exists. Deactivate or rename the active duplicate first.`
+        );
+        return;
+      }
+
       const ingredientRef = doc(db, "ingredients", selectedIngredient.id);
 
       await updateDoc(ingredientRef, {
-        currentStock: increment(addedStock),
+        isActive: true,
+        nameKey,
         updatedAt: serverTimestamp(),
       });
+
+      await writeActivityLog({
+        actor: userProfile,
+        actionType: "inventory.ingredient.restored",
+        targetId: selectedIngredient.id,
+        targetName: selectedIngredient.name,
+        description: `${userProfile.name || "A user"} restored ingredient ${
+          selectedIngredient.name
+        }.`,
+        metadata: {
+          ingredientName: selectedIngredient.name,
+          ingredientStatus: "Active",
+          purchaseUnit: selectedIngredient.purchaseUnit,
+          usageUnit: selectedIngredient.usageUnit,
+          usagePerPurchaseUnit: selectedIngredient.usagePerPurchaseUnit,
+          purchaseCost: selectedIngredient.purchaseCost,
+          currentStock: selectedIngredient.currentStock,
+          minThreshold: selectedIngredient.minThreshold,
+          actionSource: "Ingredients tab",
+        },
+      });
+      await writeActivityLog({
+        actor: userProfile,
+        actionType: "inventory.ingredient.deactivated",
+        targetId: selectedIngredient.id,
+        targetName: selectedIngredient.name,
+        description: `${userProfile.name || "A user"} deactivated ingredient ${
+          selectedIngredient.name
+        }.`,
+        metadata: {
+          ingredientName: selectedIngredient.name,
+          ingredientStatus: "Inactive",
+          purchaseUnit: selectedIngredient.purchaseUnit,
+          usageUnit: selectedIngredient.usageUnit,
+          usagePerPurchaseUnit: selectedIngredient.usagePerPurchaseUnit,
+          purchaseCost: selectedIngredient.purchaseCost,
+          currentStock: selectedIngredient.currentStock,
+          minThreshold: selectedIngredient.minThreshold,
+          actionSource: "Ingredients tab",
+        },
+      });
+
       await writeActivityLog({
         actor: userProfile,
         actionType: "inventory.ingredient.restocked",
@@ -307,11 +406,34 @@ function IngredientsPanel({
     setFormMessage("Deactivating ingredient...");
 
     try {
-      const ingredientRef = doc(db, "ingredients", selectedIngredient.id);
+      const ingredientBeingDeactivated = selectedIngredient;
+      const ingredientRef = doc(db, "ingredients", ingredientBeingDeactivated.id);
 
       await updateDoc(ingredientRef, {
         isActive: false,
+        nameKey: normalizeKey(ingredientBeingDeactivated.name),
         updatedAt: serverTimestamp(),
+      });
+
+      await writeActivityLog({
+        actor: userProfile,
+        actionType: "inventory.ingredient.deactivated",
+        targetId: ingredientBeingDeactivated.id,
+        targetName: ingredientBeingDeactivated.name,
+        description: `${userProfile.name || "A user"} deactivated ingredient ${
+          ingredientBeingDeactivated.name
+        }.`,
+        metadata: {
+          ingredientName: ingredientBeingDeactivated.name,
+          ingredientStatus: "Inactive",
+          purchaseUnit: ingredientBeingDeactivated.purchaseUnit,
+          usageUnit: ingredientBeingDeactivated.usageUnit,
+          usagePerPurchaseUnit: ingredientBeingDeactivated.usagePerPurchaseUnit,
+          purchaseCost: ingredientBeingDeactivated.purchaseCost,
+          currentStock: ingredientBeingDeactivated.currentStock,
+          minThreshold: ingredientBeingDeactivated.minThreshold,
+          actionSource: "Ingredients tab",
+        },
       });
 
       showTemporaryMessage("Ingredient deactivated successfully.");
@@ -347,6 +469,27 @@ function IngredientsPanel({
         updatedAt: serverTimestamp(),
       });
 
+      await writeActivityLog({
+        actor: userProfile,
+        actionType: "inventory.ingredient.restored",
+        targetId: selectedIngredient.id,
+        targetName: selectedIngredient.name,
+        description: `${userProfile.name || "A user"} restored ingredient ${
+          selectedIngredient.name
+        }.`,
+        metadata: {
+          ingredientName: selectedIngredient.name,
+          ingredientStatus: "Active",
+          purchaseUnit: selectedIngredient.purchaseUnit,
+          usageUnit: selectedIngredient.usageUnit,
+          usagePerPurchaseUnit: selectedIngredient.usagePerPurchaseUnit,
+          purchaseCost: selectedIngredient.purchaseCost,
+          currentStock: selectedIngredient.currentStock,
+          minThreshold: selectedIngredient.minThreshold,
+          actionSource: "Ingredients tab",
+        },
+      });
+
       showTemporaryMessage("Ingredient restored successfully.");
       closeIngredientModal();
 
@@ -380,6 +523,27 @@ function IngredientsPanel({
     setFormMessage("Updating ingredient...");
 
     try {
+      const trimmedName = name.trim();
+      const nameKey = normalizeKey(trimmedName);
+
+      setFormMessage("Checking duplicate ingredient...");
+
+      const duplicateIngredient = await findIngredientDuplicateByNameKey(
+        nameKey,
+        selectedIngredient.id
+      );
+
+      if (duplicateIngredient) {
+        const duplicateData = duplicateIngredient.data();
+        const duplicateStatus =
+          duplicateData.isActive === false ? "inactive" : "active";
+
+        setFormMessage(
+          `${trimmedName} already exists as an ${duplicateStatus} ingredient. Use the existing ingredient instead of creating a duplicate.`
+        );
+        return;
+      }
+
       const conversion = Number(usagePerPurchaseUnit);
       const cost = Number(purchaseCost);
       const threshold = Number(minThreshold);
@@ -388,7 +552,8 @@ function IngredientsPanel({
       const ingredientRef = doc(db, "ingredients", selectedIngredient.id);
 
       await updateDoc(ingredientRef, {
-        name: name.trim(),
+        name: trimmedName,
+        nameKey,
         purchaseUnit,
         usageUnit,
         usagePerPurchaseUnit: conversion,
@@ -396,6 +561,50 @@ function IngredientsPanel({
         minThreshold: threshold,
         costPerUsageUnit,
         updatedAt: serverTimestamp(),
+      });
+
+      await writeActivityLog({
+        actor: userProfile,
+        actionType: "inventory.ingredient.updated",
+        targetId: selectedIngredient.id,
+        targetName: trimmedName,
+        description: `${userProfile.name || "A user"} updated ingredient ${
+          selectedIngredient.name
+        }.`,
+        metadata: {
+          previousIngredientName: selectedIngredient.name,
+          newIngredientName: trimmedName,
+          purchaseUnit,
+          usageUnit,
+          usagePerPurchaseUnit: conversion,
+          purchaseCost: cost,
+          costPerUsageUnit,
+          minThreshold: threshold,
+          currentStock: selectedIngredient.currentStock,
+          actionSource: "Ingredients tab",
+        },
+      });
+
+      await writeActivityLog({
+        actor: userProfile,
+        actionType: "inventory.ingredient.updated",
+        targetId: selectedIngredient.id,
+        targetName: name.trim(),
+        description: `${userProfile.name || "A user"} updated ingredient ${
+          selectedIngredient.name
+        }.`,
+        metadata: {
+          previousIngredientName: selectedIngredient.name,
+          newIngredientName: name.trim(),
+          purchaseUnit,
+          usageUnit,
+          usagePerPurchaseUnit: conversion,
+          purchaseCost: cost,
+          costPerUsageUnit,
+          minThreshold: threshold,
+          currentStock: selectedIngredient.currentStock,
+          actionSource: "Ingredients tab",
+        },
       });
 
       showTemporaryMessage("Ingredient updated successfully.");
@@ -512,7 +721,7 @@ function IngredientsPanel({
 
         const costPerUsageUnit = calculateCostPerUsageUnit(cost, conversion);
 
-        await addDoc(collection(db, "ingredients"), {
+        const ingredientDocRef = await addDoc(collection(db, "ingredients"), {
           name: trimmedName,
           nameKey,
           purchaseUnit,
@@ -525,6 +734,26 @@ function IngredientsPanel({
           isActive: true,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
+        });
+
+        await writeActivityLog({
+          actor: userProfile,
+          actionType: "inventory.ingredient.added",
+          targetId: ingredientDocRef.id,
+          targetName: trimmedName,
+          description: `${userProfile.name || "A user"} added ingredient ${trimmedName}.`,
+          metadata: {
+            ingredientName: trimmedName,
+            ingredientStatus: "Active",
+            purchaseUnit,
+            usageUnit,
+            usagePerPurchaseUnit: conversion,
+            purchaseCost: cost,
+            costPerUsageUnit,
+            currentStock,
+            minThreshold: threshold,
+            actionSource: "Ingredients tab",
+          },
         });
 
         resetForm();
@@ -831,8 +1060,6 @@ function IngredientsPanel({
                       </>
                     )}
                   </span>
-
-                  <span className="ingredient-card-tap-hint">Tap to view</span>
 
                   <span className="ingredient-card-tap-hint">Tap to view</span>
                 </div>
