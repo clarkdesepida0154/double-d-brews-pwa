@@ -243,6 +243,14 @@ function formatMetadataLabel(key: string) {
     voidNote: "Void Note",
     stockRestored: "Stock Restored",
     stockMovement: "Stock Movement",
+    previousStock: "Previous Stock",
+    newStock: "New Stock",
+    purchaseQuantity: "Quantity Added",
+    purchaseUnit: "Purchase Unit",
+    usageAmountAdded: "Stock Added",
+    usageUnit: "Stock Unit",
+    restockSource: "Restock Source",
+    restockNote: "Restock Note",
   };
 
   return labels[key] || key.replace(/([A-Z])/g, " $1").replace(/^./, (letter) =>
@@ -280,6 +288,15 @@ function formatMetadataValue(key: string, value: unknown) {
     typeof value === "number"
   ) {
     return `₱${value.toFixed(2)}`;
+  }
+
+  if (
+    (key === "previousStock" ||
+      key === "newStock" ||
+      key === "usageAmountAdded") &&
+    typeof value === "number"
+  ) {
+    return String(value);
   }
 
   if (typeof value === "string" || typeof value === "number") {

@@ -11,6 +11,8 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../../firebase/config";
+import type { UserProfile } from "../../types/UserProfile";
+import { writeActivityLog } from "../../utils/activityLogUtils";
 import type {
   Ingredient,
   PurchaseUnit,
@@ -49,9 +51,13 @@ const usageUnits: UsageUnit[] = [
 
 type IngredientsPanelProps = {
   isStaffMode?: boolean;
+  userProfile: UserProfile;
 };
 
-function IngredientsPanel({ isStaffMode = false }: IngredientsPanelProps) {
+function IngredientsPanel({
+  isStaffMode = false,
+  userProfile,
+}: IngredientsPanelProps) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [ingredientStatusFilter, setIngredientStatusFilter] = useState<"active" | "inactive">("active");
@@ -244,12 +250,33 @@ function IngredientsPanel({ isStaffMode = false }: IngredientsPanelProps) {
         quantity,
         selectedIngredient.usagePerPurchaseUnit
       );
+      const previousStock = selectedIngredient.currentStock;
+      const newStock = previousStock + addedStock;
 
       const ingredientRef = doc(db, "ingredients", selectedIngredient.id);
 
       await updateDoc(ingredientRef, {
         currentStock: increment(addedStock),
         updatedAt: serverTimestamp(),
+      });
+      await writeActivityLog({
+        actor: userProfile,
+        actionType: "inventory.ingredient.restocked",
+        targetId: selectedIngredient.id,
+        targetName: selectedIngredient.name,
+        description: `${userProfile.name || "A user"} restocked ${
+          selectedIngredient.name
+        } from the Ingredients tab.`,
+        metadata: {
+          ingredientName: selectedIngredient.name,
+          purchaseQuantity: quantity,
+          purchaseUnit: selectedIngredient.purchaseUnit,
+          usageAmountAdded: addedStock,
+          usageUnit: selectedIngredient.usageUnit,
+          previousStock,
+          newStock,
+          restockSource: "Ingredients tab",
+        },
       });
 
       showTemporaryMessage("Stock updated successfully.");

@@ -10,11 +10,17 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../../firebase/config";
+import type { UserProfile } from "../../types/UserProfile";
+import { writeActivityLog } from "../../utils/activityLogUtils";
 import type { Ingredient } from "../../types/InventoryTypes";
 import {
   calculateStockFromPurchaseQuantity,
   formatIngredientStock,
 } from "./inventoryUtils";
+
+type LowStockPanelProps = {
+  userProfile: UserProfile;
+};
 
 type StockMovement = {
   id: string;
@@ -57,7 +63,7 @@ function getStockStatus(ingredient: Ingredient) {
   };
 }
 
-function LowStockPanel() {
+function LowStockPanel({ userProfile }: LowStockPanelProps) {
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -247,6 +253,27 @@ const loadStockMovements = useCallback(async () => {
         newStock,
         note: restockNote.trim(),
         createdAt: serverTimestamp(),
+      });
+
+      await writeActivityLog({
+        actor: userProfile,
+        actionType: "inventory.low_stock.restocked",
+        targetId: ingredientToRestock.id,
+        targetName: ingredientToRestock.name,
+        description: `${userProfile.name || "A user"} restocked ${
+          ingredientToRestock.name
+        } from the Low Stock Center.`,
+        metadata: {
+          ingredientName: ingredientToRestock.name,
+          purchaseQuantity,
+          purchaseUnit: ingredientToRestock.purchaseUnit,
+          usageAmountAdded: stockToAdd,
+          usageUnit: ingredientToRestock.usageUnit,
+          previousStock,
+          newStock,
+          restockSource: "Low Stock Center",
+          restockNote: restockNote.trim() || "No note entered",
+        },
       });
 
       setIngredientToRestock(null);

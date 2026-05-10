@@ -5,14 +5,16 @@ import InventoryHealthSummary from "./InventoryHealthSummary";
 import LowStockPanel from "./LowStockPanel";
 import ProductsPanel from "./ProductsPanel";
 import RecipesPanel from "./RecipesPanel";
+import type { UserProfile } from "../../types/UserProfile";
 
 type InventoryTab = "ingredients" | "products" | "recipes" | "low-stock";
 
 type InventoryPageProps = {
   userRole?: "developer" | "owner" | "staff";
+  userProfile: UserProfile;
 };
 
-function InventoryPage({ userRole = "owner" }: InventoryPageProps) {
+function InventoryPage({ userRole = "owner", userProfile }: InventoryPageProps) {
   const [activeTab, setActiveTab] = useState<InventoryTab>("ingredients");
   const [isHealthModalOpen, setIsHealthModalOpen] = useState(false);
 
@@ -96,10 +98,10 @@ function InventoryPage({ userRole = "owner" }: InventoryPageProps) {
       </div>
 
       <div className="inventory-panel">
-        {activeTab === "ingredients" && <IngredientsPanel isStaffMode={isStaffMode} />}
+        {activeTab === "ingredients" && <IngredientsPanel isStaffMode={isStaffMode} userProfile={userProfile} />}
         {activeTab === "products" && !isStaffMode && <ProductsPanel />}
         {activeTab === "recipes" && !isStaffMode && <RecipesPanel />}
-        {activeTab === "low-stock" && <LowStockPanel />}
+        {activeTab === "low-stock" && <LowStockPanel userProfile={userProfile} />}
       </div>
 
       {!isStaffMode && isHealthModalOpen && (
