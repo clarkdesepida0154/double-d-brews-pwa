@@ -592,7 +592,9 @@ function DashboardPage({ userProfile }: DashboardPageProps) {
         )}
         {currentPage === "sales-reports" && isOwnerLevelUser && <SalesReportsPage />}
         {currentPage === "user-management" && isOwnerLevelUser && <UserManagementPage />}
-        {currentPage === "settings" && <SettingsPage />}
+        {currentPage === "settings" && (
+          <SettingsPage userRole={userRole} userProfile={userProfile} />
+        )}
 
         {!allowedPages.includes(currentPage) && (
           <section className="dashboard-access-card">
