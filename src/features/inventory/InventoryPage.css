@@ -2016,3 +2016,113 @@ button:disabled {
     display: none;
   }
 }
+
+/* =========================
+   Product Category Filters
+========================= */
+
+.product-filter-toolbar {
+  grid-template-columns: minmax(220px, 1fr) 180px 190px auto;
+  align-items: center;
+}
+
+.product-filter-select {
+  width: 100%;
+  border: 1px solid rgba(92, 55, 31, 0.16);
+  border-radius: 16px;
+  background: #fffaf2;
+  color: #3c2415;
+  padding: 11px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 900;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.product-filter-select:focus {
+  border-color: rgba(92, 55, 31, 0.42);
+  background: #fffdf9;
+  box-shadow: 0 0 0 4px rgba(155, 106, 61, 0.12);
+}
+
+.product-category-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0 14px;
+}
+
+.product-category-summary-card {
+  border: 1px solid rgba(92, 55, 31, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 250, 242, 0.95);
+  padding: 13px;
+  box-shadow: 0 10px 20px rgba(92, 55, 31, 0.05);
+}
+
+.product-category-summary-card span {
+  display: block;
+  color: #9b6a3d;
+  font-size: 11px;
+  font-weight: 1000;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.product-category-summary-card strong {
+  display: block;
+  margin-top: 5px;
+  color: #321d12;
+  font-size: 24px;
+  font-weight: 1000;
+  line-height: 1.1;
+}
+
+.product-category-summary-card p {
+  margin: 5px 0 0;
+  color: #76563b;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.product-category-summary-card.good {
+  background: rgba(226, 245, 229, 0.95);
+}
+
+.product-category-summary-card.good span {
+  color: #286a36;
+}
+
+.product-category-summary-card.warning {
+  background: rgba(255, 244, 216, 0.95);
+}
+
+.product-category-summary-card.warning span {
+  color: #8a5a12;
+}
+
+.product-category-summary-card.muted {
+  background: rgba(244, 231, 211, 0.72);
+}
+
+@media (max-width: 1100px) {
+  .product-filter-toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .product-category-summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .product-filter-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .product-category-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}

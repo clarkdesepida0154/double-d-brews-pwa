@@ -262,6 +262,32 @@ function formatMetadataLabel(key: string) {
       restockNote: "Restock Note",
       actionSource: "Action Source",
 
+      productName: "Product",
+      previousProductName: "Previous Product Name",
+      newProductName: "New Product Name",
+      productCategory: "Category",
+      previousCategory: "Previous Category",
+      newCategory: "New Category",
+      sellingType: "Selling Type",
+      productStatus: "Product Status",
+      productAvailable: "Product Available",
+      singleItemPrice: "Single Item Price",
+      defaultSingleItemSizeId: "Single Item Setup ID",
+
+      sizeName: "Size",
+      previousSizeName: "Previous Size",
+      newSizeName: "New Size",
+      price: "Price",
+      previousPrice: "Previous Price",
+      newPrice: "New Price",
+      sizeStatus: "Size Status",
+      sizeAvailable: "Size Available",
+      hasCompleteRecipe: "Recipe Completed",
+
+      ingredientCount: "Ingredient Count",
+      totalRecipeCost: "Recipe Cost",
+      estimatedProfit: "Estimated Profit",
+
       unit: "Unit",
   };
 
@@ -276,7 +302,19 @@ function formatMetadataValue(key: string, value: unknown) {
       return value ? "Yes, stock was restored" : "No";
     }
 
+    if (
+      key === "productAvailable" ||
+      key === "sizeAvailable" ||
+      key === "hasCompleteRecipe"
+    ) {
+      return value ? "Yes" : "No";
+    }
+
     return value ? "Enabled" : "Disabled";
+  }
+
+  if (key === "sellingType" && typeof value === "string") {
+    return value === "single" ? "Single Item" : "Has Sizes";
   }
 
   if (key === "receiptCopies" && typeof value === "number") {
@@ -294,15 +332,21 @@ function formatMetadataValue(key: string, value: unknown) {
   }
 
   if (
-    (key === "totalAmount" ||
-      key === "cashReceived" ||
-      key === "changeAmount" ||
-      key === "purchaseCost" ||
-      key === "costPerUsageUnit") &&
-    typeof value === "number"
-  ) {
-    return `₱${value.toFixed(2)}`;
-  }
+  (key === "totalAmount" ||
+    key === "cashReceived" ||
+    key === "changeAmount" ||
+    key === "purchaseCost" ||
+    key === "costPerUsageUnit" ||
+    key === "singleItemPrice" ||
+    key === "price" ||
+    key === "previousPrice" ||
+    key === "newPrice" ||
+    key === "totalRecipeCost" ||
+    key === "estimatedProfit") &&
+  typeof value === "number"
+) {
+  return `₱${value.toFixed(2)}`;
+}
 
   if (
     (key === "currentStock" ||

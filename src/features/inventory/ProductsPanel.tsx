@@ -12,6 +12,8 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../../firebase/config";
+import type { UserProfile } from "../../types/UserProfile";
+import { writeActivityLog } from "../../utils/activityLogUtils";
 import type {
   Ingredient,
   Product,
@@ -20,6 +22,7 @@ import type {
   ProductSize,
   RecipeIngredient,
 } from "../../types/InventoryTypes";
+
 
 const DEFAULT_SINGLE_ITEM_SIZE_NAME = "Regular";
 const DEFAULT_SINGLE_ITEM_SIZE_KEY = "regular";
@@ -133,10 +136,31 @@ async function findActiveProductSizeDuplicateBySizeKey(
   });
 }
 
-function ProductsPanel() {
+type ProductsPanelProps = {
+  userProfile: UserProfile;
+};
+
+type ProductCategoryFilter = "All" | ProductCategory;
+
+type ProductReadinessFilter =
+  | "all"
+  | "ready"
+  | "needs-size"
+  | "needs-recipe"
+  | "product-off"
+  | "not-sellable";
+
+function ProductsPanel({ userProfile }: ProductsPanelProps) {
   const [isFormOpen, setIsFormOpen] = useState(false);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [productStatusFilter, setProductStatusFilter] = useState<"active" | "inactive">("active");
+  const [productCategoryFilter, setProductCategoryFilter] =
+    useState<ProductCategoryFilter>("All");
+  const [productReadinessFilter, setProductReadinessFilter] =
+    useState<ProductReadinessFilter>("all");
+
+  
 
   const [name, setName] = useState("");
   const [category, setCategory] = useState<ProductCategory>("Milk Tea");
@@ -471,16 +495,57 @@ const sizeStats = sizesSnapshot.docs.reduce<
     const estimatedProfit = selectedSize ? selectedSize.price - totalRecipeCost : 0;
 
   const filteredProducts = useMemo(() => {
-    const search = searchTerm.trim().toLowerCase();
+  const search = searchTerm.trim().toLowerCase();
 
-    if (!search) {
-      return products;
-    }
+  return products.filter((product) => {
+    const matchesSearch =
+      !search ||
+      product.name.toLowerCase().includes(search) ||
+      product.category.toLowerCase().includes(search);
 
-    return products.filter((product) =>
-      product.name.toLowerCase().includes(search)
+    const matchesCategory =
+      productCategoryFilter === "All" ||
+      product.category === productCategoryFilter;
+
+    const matchesReadiness =
+      productStatusFilter === "inactive" ||
+      productReadinessFilter === "all" ||
+      getProductReadinessKey(product) === productReadinessFilter;
+
+    return matchesSearch && matchesCategory && matchesReadiness;
+  });
+}, [
+  products,
+  searchTerm,
+  productCategoryFilter,
+  productReadinessFilter,
+  productStatusFilter,
+]);
+
+const productCategorySummary = useMemo(() => {
+  const productsInSelectedCategory = products.filter((product) => {
+    return (
+      productCategoryFilter === "All" ||
+      product.category === productCategoryFilter
     );
-  }, [products, searchTerm]);
+  });
+
+  return {
+    total: productsInSelectedCategory.length,
+    ready: productsInSelectedCategory.filter(
+      (product) => getProductReadinessKey(product) === "ready"
+    ).length,
+    needsSize: productsInSelectedCategory.filter(
+      (product) => getProductReadinessKey(product) === "needs-size"
+    ).length,
+    needsRecipe: productsInSelectedCategory.filter(
+      (product) => getProductReadinessKey(product) === "needs-recipe"
+    ).length,
+    productOff: productsInSelectedCategory.filter(
+      (product) => getProductReadinessKey(product) === "product-off"
+    ).length,
+  };
+}, [products, productCategoryFilter, productSizeStats]);
 
   function resetForm() {
     setName("");
@@ -563,6 +628,25 @@ const sizeStats = sizesSnapshot.docs.reduce<
             category: editProductCategory,
             isAvailable: editProductAvailable,
             updatedAt: serverTimestamp(),
+            });
+
+            await writeActivityLog({
+              actor: userProfile,
+              actionType: "inventory.product.updated",
+              targetId: selectedProduct.id,
+              targetName: trimmedName,
+              description: `${userProfile.name || "A user"} updated product ${
+                selectedProduct.name
+              }.`,
+              metadata: {
+                previousProductName: selectedProduct.name,
+                newProductName: trimmedName,
+                previousCategory: selectedProduct.category,
+                newCategory: editProductCategory,
+                sellingType: selectedProduct.sellingType || "sized",
+                productAvailable: editProductAvailable,
+                actionSource: "Products tab",
+              },
             });
 
             const updatedProduct = {
@@ -692,8 +776,10 @@ const sizeStats = sizesSnapshot.docs.reduce<
               updatedAt: serverTimestamp(),
             });
 
+            let defaultSingleItemSizeId = "";
+
             if (sellingType === "single") {
-              await addDoc(collection(db, "productSizes"), {
+              const defaultSizeDocRef = await addDoc(collection(db, "productSizes"), {
                 productId: productDocRef.id,
                 productName: trimmedName,
                 sizeName: DEFAULT_SINGLE_ITEM_SIZE_NAME,
@@ -705,7 +791,28 @@ const sizeStats = sizesSnapshot.docs.reduce<
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
               });
+
+              defaultSingleItemSizeId = defaultSizeDocRef.id;
             }
+
+            await writeActivityLog({
+              actor: userProfile,
+              actionType: "inventory.product.added",
+              targetId: productDocRef.id,
+              targetName: trimmedName,
+              description: `${userProfile.name || "A user"} added product ${trimmedName}.`,
+              metadata: {
+                productName: trimmedName,
+                productCategory: category,
+                sellingType,
+                productStatus: "Active",
+                productAvailable: isAvailable,
+                singleItemPrice:
+                  sellingType === "single" ? Number(singleItemPrice) : null,
+                defaultSingleItemSizeId,
+                actionSource: "Products tab",
+              },
+            });
 
             resetForm();
             setIsFormOpen(false);
@@ -746,6 +853,24 @@ const sizeStats = sizesSnapshot.docs.reduce<
           isAvailable: true,
           nameKey,
           updatedAt: serverTimestamp(),
+        });
+
+        await writeActivityLog({
+          actor: userProfile,
+          actionType: "inventory.product.restored",
+          targetId: product.id,
+          targetName: product.name,
+          description: `${userProfile.name || "A user"} restored product ${
+            product.name
+          }.`,
+          metadata: {
+            productName: product.name,
+            productCategory: product.category,
+            sellingType: product.sellingType || "sized",
+            productStatus: "Active",
+            productAvailable: true,
+            actionSource: "Products tab",
+          },
         });
 
         closeProductDetails();
@@ -799,16 +924,35 @@ const sizeStats = sizesSnapshot.docs.reduce<
 
             setFormMessage("Saving size...");
 
-            await addDoc(collection(db, "productSizes"), {
-                productId: selectedProduct.id,
+            const sizeDocRef = await addDoc(collection(db, "productSizes"), {
+              productId: selectedProduct.id,
+              productName: selectedProduct.name,
+              sizeName: trimmedSizeName,
+              sizeKey,
+              price,
+              isAvailable: false,
+              isActive: true,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            });
+
+            await writeActivityLog({
+              actor: userProfile,
+              actionType: "inventory.product_size.added",
+              targetId: sizeDocRef.id,
+              targetName: `${selectedProduct.name} - ${trimmedSizeName}`,
+              description: `${userProfile.name || "A user"} added size ${trimmedSizeName} for ${
+                selectedProduct.name
+              }.`,
+              metadata: {
                 productName: selectedProduct.name,
                 sizeName: trimmedSizeName,
-                sizeKey,
+                sellingType: selectedProduct.sellingType || "sized",
                 price,
-                isAvailable: false,
-                isActive: true,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
+                sizeStatus: "Active",
+                sizeAvailable: false,
+                actionSource: "Products tab",
+              },
             });
 
             resetSizeForm();
@@ -924,6 +1068,42 @@ const sizeStats = sizesSnapshot.docs.reduce<
                     updatedAt: serverTimestamp(),
                 });
 
+                await writeActivityLog({
+                  actor: userProfile,
+                  actionType: existingRecipeSnapshot.exists()
+                    ? "inventory.recipe.updated"
+                    : "inventory.recipe.added",
+                  targetId: selectedSize.id,
+                  targetName:
+                    selectedProduct.sellingType === "single"
+                      ? selectedProduct.name
+                      : `${selectedProduct.name} - ${selectedSize.sizeName}`,
+                  description: existingRecipeSnapshot.exists()
+                    ? `${userProfile.name || "A user"} updated recipe for ${
+                        selectedProduct.sellingType === "single"
+                          ? selectedProduct.name
+                          : `${selectedProduct.name} ${selectedSize.sizeName}`
+                      }.`
+                    : `${userProfile.name || "A user"} saved recipe for ${
+                        selectedProduct.sellingType === "single"
+                          ? selectedProduct.name
+                          : `${selectedProduct.name} ${selectedSize.sizeName}`
+                      }.`,
+                  metadata: {
+                    productName: selectedProduct.name,
+                    sizeName:
+                      selectedProduct.sellingType === "single" && selectedSize.isDefaultSize
+                        ? "Single Item"
+                        : selectedSize.sizeName,
+                    sellingType: selectedProduct.sellingType || "sized",
+                    price: selectedSize.price,
+                    ingredientCount: recipeIngredients.length,
+                    totalRecipeCost,
+                    estimatedProfit,
+                    actionSource: "Recipe setup",
+                  },
+                });
+
                 setSavedRecipeId(selectedSize.id);
 
                 showTemporaryMessage(
@@ -957,6 +1137,24 @@ const sizeStats = sizesSnapshot.docs.reduce<
                 isActive: false,
                 isAvailable: false,
                 updatedAt: serverTimestamp(),
+                });
+
+                await writeActivityLog({
+                  actor: userProfile,
+                  actionType: "inventory.product.deactivated",
+                  targetId: selectedProduct.id,
+                  targetName: selectedProduct.name,
+                  description: `${userProfile.name || "A user"} deactivated product ${
+                    selectedProduct.name
+                  }.`,
+                  metadata: {
+                    productName: selectedProduct.name,
+                    productCategory: selectedProduct.category,
+                    sellingType: selectedProduct.sellingType || "sized",
+                    productStatus: "Inactive",
+                    productAvailable: false,
+                    actionSource: "Products tab",
+                  },
                 });
 
                 setIsDeactivateProductConfirmOpen(false);
@@ -1050,6 +1248,38 @@ const sizeStats = sizesSnapshot.docs.reduce<
                 updatedAt: serverTimestamp(),
                 });
 
+                await writeActivityLog({
+                  actor: userProfile,
+                  actionType:
+                    selectedProduct.sellingType === "single"
+                      ? "inventory.single_item.price_updated"
+                      : "inventory.product_size.updated",
+                  targetId: editingSize.id,
+                  targetName:
+                    selectedProduct.sellingType === "single"
+                      ? selectedProduct.name
+                      : `${selectedProduct.name} - ${trimmedSizeName}`,
+                  description:
+                    selectedProduct.sellingType === "single"
+                      ? `${userProfile.name || "A user"} updated single item price for ${
+                          selectedProduct.name
+                        }.`
+                      : `${userProfile.name || "A user"} updated size ${trimmedSizeName} for ${
+                          selectedProduct.name
+                        }.`,
+                  metadata: {
+                    productName: selectedProduct.name,
+                    previousSizeName: editingSize.sizeName,
+                    newSizeName: trimmedSizeName,
+                    sellingType: selectedProduct.sellingType || "sized",
+                    previousPrice: editingSize.price,
+                    newPrice: price,
+                    hasCompleteRecipe,
+                    sizeAvailable: hasCompleteRecipe ? editSizeAvailable : false,
+                    actionSource: "Products tab",
+                  },
+                });
+
                 if (recipeSnapshot.exists()) {
                 await updateDoc(recipeRef, {
                     productName: selectedProduct.name,
@@ -1084,6 +1314,36 @@ const sizeStats = sizesSnapshot.docs.reduce<
                 isActive: false,
                 isAvailable: false,
                 updatedAt: serverTimestamp(),
+                });
+
+                await writeActivityLog({
+                  actor: userProfile,
+                  actionType:
+                    selectedProduct.sellingType === "single"
+                      ? "inventory.single_item.deactivated"
+                      : "inventory.product_size.deactivated",
+                  targetId: sizeToDeactivate.id,
+                  targetName:
+                    selectedProduct.sellingType === "single"
+                      ? selectedProduct.name
+                      : `${selectedProduct.name} - ${sizeToDeactivate.sizeName}`,
+                  description:
+                    selectedProduct.sellingType === "single"
+                      ? `${userProfile.name || "A user"} deactivated single item setup for ${
+                          selectedProduct.name
+                        }.`
+                      : `${userProfile.name || "A user"} deactivated size ${
+                          sizeToDeactivate.sizeName
+                        } for ${selectedProduct.name}.`,
+                  metadata: {
+                    productName: selectedProduct.name,
+                    sizeName: sizeToDeactivate.sizeName,
+                    sellingType: selectedProduct.sellingType || "sized",
+                    price: sizeToDeactivate.price,
+                    sizeStatus: "Inactive",
+                    sizeAvailable: false,
+                    actionSource: "Products tab",
+                  },
                 });
 
                 setSizeToDeactivate(null);
@@ -1140,6 +1400,37 @@ const sizeStats = sizesSnapshot.docs.reduce<
                   isAvailable: hasCompleteRecipe,
                   sizeKey,
                   updatedAt: serverTimestamp(),
+                });
+
+                await writeActivityLog({
+                  actor: userProfile,
+                  actionType:
+                    selectedProduct.sellingType === "single"
+                      ? "inventory.single_item.restored"
+                      : "inventory.product_size.restored",
+                  targetId: size.id,
+                  targetName:
+                    selectedProduct.sellingType === "single"
+                      ? selectedProduct.name
+                      : `${selectedProduct.name} - ${size.sizeName}`,
+                  description:
+                    selectedProduct.sellingType === "single"
+                      ? `${userProfile.name || "A user"} restored single item setup for ${
+                          selectedProduct.name
+                        }.`
+                      : `${userProfile.name || "A user"} restored size ${size.sizeName} for ${
+                          selectedProduct.name
+                        }.`,
+                  metadata: {
+                    productName: selectedProduct.name,
+                    sizeName: size.sizeName,
+                    sellingType: selectedProduct.sellingType || "sized",
+                    price: size.price,
+                    sizeStatus: "Active",
+                    sizeAvailable: hasCompleteRecipe,
+                    hasCompleteRecipe,
+                    actionSource: "Products tab",
+                  },
                 });
 
                 setSizeStatusFilter("active");
@@ -1231,6 +1522,27 @@ const sizeStats = sizesSnapshot.docs.reduce<
   };
 }
 
+function getProductReadinessKey(product: Product): ProductReadinessFilter {
+  const productStatus = getProductListStatus(product);
+
+  if (productStatus.label === "Ready for POS") {
+    return "ready";
+  }
+
+  if (productStatus.label === "Needs Size") {
+    return "needs-size";
+  }
+
+  if (productStatus.label === "Needs Recipe") {
+    return "needs-recipe";
+  }
+
+  if (productStatus.label === "Product Off") {
+    return "product-off";
+  }
+
+  return "not-sellable";
+}
   if (isFormOpen) {
     return (
       <section className="products-panel">
@@ -1365,6 +1677,7 @@ const sizeStats = sizesSnapshot.docs.reduce<
           className={productStatusFilter === "inactive" ? "active" : ""}
           onClick={() => {
             setProductStatusFilter("inactive");
+            setProductReadinessFilter("all");
             setFormMessage("");
           }}
         >
@@ -1372,15 +1685,49 @@ const sizeStats = sizesSnapshot.docs.reduce<
         </button>
       </div>
 
-      <div className="inventory-list-toolbar">
+      <div className="inventory-list-toolbar product-filter-toolbar">
         <div className="inventory-search-wrap">
           <input
             type="search"
-            placeholder="Search products..."
+            placeholder="Search products or categories..."
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
           />
         </div>
+
+        <select
+          className="product-filter-select"
+          value={productCategoryFilter}
+          onChange={(event) =>
+            setProductCategoryFilter(event.target.value as ProductCategoryFilter)
+          }
+        >
+          <option value="All">All Categories</option>
+          {productCategories.map((productCategory) => (
+            <option value={productCategory} key={productCategory}>
+              {productCategory}
+            </option>
+          ))}
+        </select>
+
+        {productStatusFilter === "active" && (
+          <select
+            className="product-filter-select"
+            value={productReadinessFilter}
+            onChange={(event) =>
+              setProductReadinessFilter(
+                event.target.value as ProductReadinessFilter
+              )
+            }
+          >
+            <option value="all">All Product Statuses</option>
+            <option value="ready">Ready for POS</option>
+            <option value="needs-size">Needs Size</option>
+            <option value="needs-recipe">Needs Recipe</option>
+            <option value="product-off">Product Off</option>
+            <option value="not-sellable">No Sellable Size</option>
+          </select>
+        )}
 
         <button
           className="primary-inventory-button compact"
@@ -1393,6 +1740,44 @@ const sizeStats = sizesSnapshot.docs.reduce<
           + Add Product
         </button>
       </div>
+
+      {productStatusFilter === "active" && (
+  <div className="product-category-summary-grid">
+    <article className="product-category-summary-card">
+      <span>
+        {productCategoryFilter === "All"
+          ? "All Categories"
+          : productCategoryFilter}
+      </span>
+      <strong>{productCategorySummary.total}</strong>
+      <p>Total active products</p>
+    </article>
+
+    <article className="product-category-summary-card good">
+      <span>Ready</span>
+      <strong>{productCategorySummary.ready}</strong>
+      <p>Can be sold in POS</p>
+    </article>
+
+    <article className="product-category-summary-card warning">
+      <span>Needs Size</span>
+      <strong>{productCategorySummary.needsSize}</strong>
+      <p>Missing selling option</p>
+    </article>
+
+    <article className="product-category-summary-card warning">
+      <span>Needs Recipe</span>
+      <strong>{productCategorySummary.needsRecipe}</strong>
+      <p>Missing recipe setup</p>
+    </article>
+
+    <article className="product-category-summary-card muted">
+      <span>Product Off</span>
+      <strong>{productCategorySummary.productOff}</strong>
+      <p>Not available for POS</p>
+    </article>
+  </div>
+)}
 
       {formMessage && <p className="inventory-form-message">{formMessage}</p>}
 
@@ -1418,7 +1803,9 @@ const sizeStats = sizesSnapshot.docs.reduce<
         {!isLoadingProducts &&
           products.length > 0 &&
           filteredProducts.length === 0 && (
-            <p className="ingredients-empty-text">No products match your search.</p>
+            <p className="ingredients-empty-text">
+              No products match the current search, category, or status filter.
+            </p>
           )}
 
         {!isLoadingProducts && filteredProducts.length > 0 && (

@@ -99,7 +99,7 @@ function InventoryPage({ userRole = "owner", userProfile }: InventoryPageProps) 
 
       <div className="inventory-panel">
         {activeTab === "ingredients" && <IngredientsPanel isStaffMode={isStaffMode} userProfile={userProfile} />}
-        {activeTab === "products" && !isStaffMode && <ProductsPanel />}
+        {activeTab === "products" && !isStaffMode && <ProductsPanel userProfile={userProfile} /> }
         {activeTab === "recipes" && !isStaffMode && <RecipesPanel />}
         {activeTab === "low-stock" && <LowStockPanel userProfile={userProfile} />}
       </div>
