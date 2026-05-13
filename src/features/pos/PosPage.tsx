@@ -15,6 +15,8 @@ import type { UserProfile } from "../../types/UserProfile";
 import { writeActivityLog } from "../../utils/activityLogUtils";
 import "./PosPage.css";
 
+type PosProductSellingType = "sized" | "single";
+
 type PosProductSize = {
   id: string;
   productId: string;
@@ -22,6 +24,8 @@ type PosProductSize = {
   category: string;
   sizeName: string;
   price: number;
+  productSellingType: PosProductSellingType;
+  isDefaultSize: boolean;
 };
 
 type CartItem = {
@@ -31,6 +35,8 @@ type CartItem = {
   sizeName: string;
   price: number;
   quantity: number;
+  productSellingType: PosProductSellingType;
+  isDefaultSize: boolean;
   itemNote?: string;
 };
 
@@ -141,7 +147,22 @@ type VoidReason =
   | "Test sale"
   | "Other";
 
-const VOID_REASONS: VoidReason[] = [
+  function shouldHideSizeName(item: {
+    productSellingType?: "sized" | "single";
+    isDefaultSize?: boolean;
+  }) {
+    return item.productSellingType === "single" || item.isDefaultSize === true;
+  }
+
+  function getCartItemPriceLine(item: CartItem) {
+    if (shouldHideSizeName(item)) {
+      return `₱${item.price.toFixed(2)}`;
+    }
+
+    return `${item.sizeName} · ₱${item.price.toFixed(2)}`;
+  }
+
+  const VOID_REASONS: VoidReason[] = [
   "Customer cancelled after checkout",
   "Wrong product entered",
   "Wrong size entered",
@@ -216,7 +237,7 @@ const loadSellableProducts = useCallback(async () => {
 
       const activeProducts = new Map<
         string,
-        { name: string; category: string }
+        { name: string; category: string; sellingType: PosProductSellingType }
       >();
 
       productsSnapshot.docs.forEach((productDoc) => {
@@ -224,8 +245,9 @@ const loadSellableProducts = useCallback(async () => {
 
         if (data.isAvailable !== false) {
           activeProducts.set(productDoc.id, {
-            name: data.name,
-            category: data.category,
+            name: String(data.name || ""),
+            category: String(data.category || "Other"),
+            sellingType: data.sellingType === "single" ? "single" : "sized",
           });
         }
       });
@@ -244,10 +266,11 @@ const loadSellableProducts = useCallback(async () => {
           .map((recipeDoc) => recipeDoc.id)
       );
 
-      const loadedSellableSizes: PosProductSize[] = sizesSnapshot.docs
-        .map((sizeDoc) => {
+      const loadedSellableSizes = sizesSnapshot.docs
+        .map((sizeDoc): PosProductSize | null => {
           const sizeData = sizeDoc.data();
-          const product = activeProducts.get(sizeData.productId);
+          const productId = String(sizeData.productId || "");
+          const product = activeProducts.get(productId);
 
           if (!product) {
             return null;
@@ -263,11 +286,13 @@ const loadSellableProducts = useCallback(async () => {
 
           return {
             id: sizeDoc.id,
-            productId: sizeData.productId,
+            productId,
             productName: product.name,
             category: product.category,
-            sizeName: sizeData.sizeName,
-            price: sizeData.price,
+            sizeName: String(sizeData.sizeName || "Regular"),
+            price: Number(sizeData.price || 0),
+            productSellingType: product.sellingType,
+            isDefaultSize: sizeData.isDefaultSize === true,
           };
         })
         .filter((size): size is PosProductSize => size !== null)
@@ -467,6 +492,8 @@ const receiptForPrinting = printableReceipt || completedSaleReceipt;
           sizeName: size.sizeName,
           price: size.price,
           quantity: 1,
+          productSellingType: size.productSellingType,
+          isDefaultSize: size.isDefaultSize,
         },
       ];
     });
@@ -1301,7 +1328,7 @@ const newStock = previousStock - requirement.requiredAmount;
                           key={size.id}
                           onClick={() => addToCart(size)}
                         >
-                          <strong>{size.sizeName}</strong>
+                          <strong>{shouldHideSizeName(size) ? "Add" : size.sizeName}</strong>
                           <small>₱{size.price.toFixed(2)}</small>
                         </button>
                       ))}
@@ -1343,7 +1370,7 @@ const newStock = previousStock - requirement.requiredAmount;
                   <div>
                     <h4>{item.productName}</h4>
                     <p>
-                      {item.sizeName} · ₱{item.price.toFixed(2)}
+                      {getCartItemPriceLine(item)}
                     </p>
                   </div>
 
@@ -1571,7 +1598,7 @@ const newStock = previousStock - requirement.requiredAmount;
             <div>
               <strong>{item.productName}</strong>
               <p>
-                {item.sizeName} · ₱{item.price.toFixed(2)}
+                {getCartItemPriceLine(item)}
               </p>
 
               {item.itemNote && (
@@ -1695,7 +1722,9 @@ const newStock = previousStock - requirement.requiredAmount;
         >
           {availableSizesForEditing.map((size) => (
             <option value={size.id} key={size.id}>
-              {size.sizeName} - ₱{size.price.toFixed(2)}
+              {shouldHideSizeName(size)
+              ? `Single Item - ₱${size.price.toFixed(2)}`
+              : `${size.sizeName} - ₱${size.price.toFixed(2)}`}
             </option>
           ))}
         </select>
@@ -1786,7 +1815,9 @@ const newStock = previousStock - requirement.requiredAmount;
             <div>
               <strong>{item.productName}</strong>
               <p>
-                {item.sizeName} · ₱{item.price.toFixed(2)} × {item.quantity}
+                {shouldHideSizeName(item)
+                ? `₱${item.price.toFixed(2)} × ${item.quantity}`
+                : `${item.sizeName} · ₱${item.price.toFixed(2)} × ${item.quantity}`}
               </p>
 
               {item.itemNote && (
@@ -2157,7 +2188,9 @@ const newStock = previousStock - requirement.requiredAmount;
                   <div>
                     <strong>{item.productName}</strong>
                     <p>
-                      {item.sizeName} · ₱{item.price.toFixed(2)} × {item.quantity}
+                      {shouldHideSizeName(item)
+                        ? `₱${item.price.toFixed(2)} × ${item.quantity}`
+                        : `${item.sizeName} · ₱${item.price.toFixed(2)} × ${item.quantity}`}
                     </p>
 
                     {item.itemNote && (
@@ -2244,7 +2277,9 @@ const newStock = previousStock - requirement.requiredAmount;
 
           <div className="thermal-item-details">
             <span>
-              {item.sizeName} x {item.quantity}
+              {shouldHideSizeName(item)
+              ? `x ${item.quantity}`
+              : `${item.sizeName} x ${item.quantity}`}
             </span>
             <span>₱{(item.price * item.quantity).toFixed(2)}</span>
           </div>

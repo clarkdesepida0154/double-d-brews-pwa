@@ -16,9 +16,13 @@ import type {
   Ingredient,
   Product,
   ProductCategory,
+  ProductSellingType,
   ProductSize,
   RecipeIngredient,
 } from "../../types/InventoryTypes";
+
+const DEFAULT_SINGLE_ITEM_SIZE_NAME = "Regular";
+const DEFAULT_SINGLE_ITEM_SIZE_KEY = "regular";
 
 const productCategories: ProductCategory[] = [
   "Milk Tea",
@@ -136,6 +140,8 @@ function ProductsPanel() {
 
   const [name, setName] = useState("");
   const [category, setCategory] = useState<ProductCategory>("Milk Tea");
+  const [sellingType, setSellingType] = useState<ProductSellingType>("sized");
+  const [singleItemPrice, setSingleItemPrice] = useState("");
   const [isAvailable, setIsAvailable] = useState(true);
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -227,10 +233,11 @@ function ProductsPanel() {
                 const data = docSnapshot.data();
 
                 return {
-                    id: docSnapshot.id,
-                    name: data.name,
-                    category: data.category,
-                    isAvailable: data.isAvailable,
+                  id: docSnapshot.id,
+                  name: data.name,
+                  category: data.category,
+                  sellingType: data.sellingType === "single" ? "single" : "sized",
+                  isAvailable: data.isAvailable,
                 };
             });
 
@@ -336,6 +343,7 @@ const sizeStats = sizesSnapshot.docs.reduce<
           price: data.price,
           isAvailable: data.isAvailable,
           isActive: data.isActive ?? true,
+          isDefaultSize: data.isDefaultSize === true,
           hasCompleteRecipe: completedRecipeSizeIds.has(docSnapshot.id),
         };
       });
@@ -477,6 +485,8 @@ const sizeStats = sizesSnapshot.docs.reduce<
   function resetForm() {
     setName("");
     setCategory("Milk Tea");
+    setSellingType("sized");
+    setSingleItemPrice("");
     setIsAvailable(true);
     setFormMessage("");
   }
@@ -612,6 +622,10 @@ const sizeStats = sizesSnapshot.docs.reduce<
       return "Product name is required.";
     }
 
+    if (sellingType === "single" && Number(singleItemPrice) <= 0) {
+      return "Single item price must be greater than 0.";
+    }
+
     return "";
   }
 
@@ -667,15 +681,31 @@ const sizeStats = sizesSnapshot.docs.reduce<
 
             setFormMessage("Saving product...");
 
-            await addDoc(collection(db, "products"), {
-            name: trimmedName,
-            nameKey,
-            category,
-            isAvailable,
-            isActive: true,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
+            const productDocRef = await addDoc(collection(db, "products"), {
+              name: trimmedName,
+              nameKey,
+              category,
+              sellingType,
+              isAvailable,
+              isActive: true,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
             });
+
+            if (sellingType === "single") {
+              await addDoc(collection(db, "productSizes"), {
+                productId: productDocRef.id,
+                productName: trimmedName,
+                sizeName: DEFAULT_SINGLE_ITEM_SIZE_NAME,
+                sizeKey: DEFAULT_SINGLE_ITEM_SIZE_KEY,
+                price: Number(singleItemPrice),
+                isDefaultSize: true,
+                isAvailable: false,
+                isActive: true,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+              });
+            }
 
             resetForm();
             setIsFormOpen(false);
@@ -956,13 +986,23 @@ const sizeStats = sizesSnapshot.docs.reduce<
                 return;
             }
 
-            const trimmedSizeName = editSizeName.trim();
+            const isSingleDefaultItem =
+              selectedProduct.sellingType === "single" && editingSize.isDefaultSize === true;
+
+            const trimmedSizeName = isSingleDefaultItem
+              ? DEFAULT_SINGLE_ITEM_SIZE_NAME
+              : editSizeName.trim();
+
             const sizeKey = normalizeKey(trimmedSizeName);
             const price = Number(editSizePrice);
 
             if (!trimmedSizeName) {
-                setFormMessage("Size name is required.");
-                return;
+              setFormMessage(
+                selectedProduct.sellingType === "single"
+                  ? "Single item setup is missing. Please recreate this product."
+                  : "Size name is required."
+              );
+              return;
             }
 
             if (price <= 0) {
@@ -1199,7 +1239,7 @@ const sizeStats = sizesSnapshot.docs.reduce<
             <p className="inventory-eyebrow">New Product</p>
             <h3 className="inventory-section-title">Add Product</h3>
             <p className="inventory-section-subtext">
-              Add a menu item first. Sizes and recipes will be configured next.
+              Add a menu item first. Choose Has Sizes for drinks, or Single Item for rice meals, snacks, add-ons, and items without sizes.
             </p>
           </div>
 
@@ -1239,6 +1279,37 @@ const sizeStats = sizesSnapshot.docs.reduce<
               ))}
             </select>
           </div>
+
+          <div className="form-group">
+            <label>Selling type</label>
+            <select
+              value={sellingType}
+              onChange={(event) =>
+                setSellingType(event.target.value as ProductSellingType)
+              }
+            >
+              <option value="sized">Has Sizes</option>
+              <option value="single">Single Item</option>
+            </select>
+          </div>
+
+          {sellingType === "single" && (
+            <div className="form-group">
+              <label>Single item price</label>
+              <input
+                type="number"
+                min="1"
+                step="0.01"
+                placeholder="Example: 49"
+                value={singleItemPrice}
+                onChange={(event) => setSingleItemPrice(event.target.value)}
+              />
+              <small>
+                Use this for rice meals, snacks, hot coffee, add-ons, and other products
+                that do not need sizes.
+              </small>
+            </div>
+          )}
 
           <label className="inventory-toggle-row">
             <input
@@ -1414,73 +1485,88 @@ const sizeStats = sizesSnapshot.docs.reduce<
                 </div>
 
                 <div className="product-modal-status-card">
-                    <span>Status</span>
-                    <strong>
-                        {productStatusFilter === "inactive"
-                        ? "Inactive Product"
-                        : selectedProduct.isAvailable
-                            ? "Available for POS"
-                            : "Unavailable"}
-                    </strong>
+                  <span>Status</span>
+                  <strong>
+                    {productStatusFilter === "inactive"
+                      ? "Inactive Product"
+                      : selectedProduct.isAvailable
+                        ? "Available for POS"
+                        : "Unavailable"}
+                  </strong>
+                </div>
+
+                <div className="product-modal-status-card">
+                  <span>Selling Type</span>
+                  <strong>
+                    {selectedProduct.sellingType === "single" ? "Single Item" : "Has Sizes"}
+                  </strong>
                 </div>
 
             {productStatusFilter === "active" && (
                 <div className="product-sizes-section">
                     <div className="product-sizes-header">
                         <div>
-                            <h4>Sizes & Prices</h4>
+                            <h4>
+                              {selectedProduct.sellingType === "single"
+                                ? "Single Item Price & Recipe"
+                                : "Sizes & Prices"}
+                            </h4>
                             <p>
-                            Manage active sizes for POS, or restore archived sizes when needed.
+                              {selectedProduct.sellingType === "single"
+                                ? "Manage this item’s price and recipe. No size will be shown in POS."
+                                : "Manage active sizes for POS, or restore archived sizes when needed."}
                             </p>
                         </div>
 
-                        {sizeStatusFilter === "active" && (
-                            <button
+                        {selectedProduct.sellingType !== "single" && sizeStatusFilter === "active" && (
+                          <button
                             type="button"
                             className="primary-inventory-button compact"
                             onClick={() => {
-                                resetSizeForm();
-                                setIsSizeFormOpen(true);
+                              resetSizeForm();
+                              setIsSizeFormOpen(true);
                             }}
-                            >
+                          >
                             + Add Size
-                            </button>
+                          </button>
                         )}
                         </div>
 
-                        <div className="ingredient-status-filter">
-                        <button
-                            type="button"
-                            className={sizeStatusFilter === "active" ? "active" : ""}
-                            onClick={async () => {
-                            if (!selectedProduct) {
-                                return;
-                            }
+                        {selectedProduct.sellingType !== "single" && (
+                          <div className="ingredient-status-filter">
+                            <button
+                              type="button"
+                              className={sizeStatusFilter === "active" ? "active" : ""}
+                              onClick={async () => {
+                                if (!selectedProduct) {
+                                  return;
+                                }
 
-                            setSizeStatusFilter("active");
-                            setFormMessage("");
-                            await loadProductSizes(selectedProduct.id, "active");
-                            }}
-                        >
-                            Active Sizes
-                        </button>
+                                setSizeStatusFilter("active");
+                                setFormMessage("");
+                                await loadProductSizes(selectedProduct.id, "active");
+                              }}
+                            >
+                              Active Sizes
+                            </button>
 
-                        <button
-                            type="button"
-                            className={sizeStatusFilter === "inactive" ? "active" : ""}
-                            onClick={async () => {
-                            if (!selectedProduct) {
-                                return;
-                            }
+                            <button
+                              type="button"
+                              className={sizeStatusFilter === "inactive" ? "active" : ""}
+                              onClick={async () => {
+                                if (!selectedProduct) {
+                                  return;
+                                }
 
-                            setSizeStatusFilter("inactive");
-                            setFormMessage("");
-                            await loadProductSizes(selectedProduct.id, "inactive");
-                            }}
-                        >
-                            Inactive Sizes
-                        </button>
-                    </div>
+                                setSizeStatusFilter("inactive");
+                                setFormMessage("");
+                                await loadProductSizes(selectedProduct.id, "inactive");
+                              }}
+                            >
+                              Inactive Sizes
+                            </button>
+                          </div>
+                        )}
 
                     {isLoadingSizes && (
                     <p className="ingredients-empty-text">Loading sizes...</p>
@@ -1488,9 +1574,11 @@ const sizeStats = sizesSnapshot.docs.reduce<
 
                     {!isLoadingSizes && productSizes.length === 0 && (
                         <p className="ingredients-empty-text">
-                            {sizeStatusFilter === "active"
-                            ? "No active sizes added yet. Add at least one size before recipe setup."
-                            : "No inactive sizes found for this product."}
+                            {selectedProduct.sellingType === "single"
+                            ? "No single item setup found. This product may need to be recreated or repaired."
+                            : sizeStatusFilter === "active"
+                              ? "No active sizes added yet. Add at least one size before recipe setup."
+                              : "No inactive sizes found for this product."}
                         </p>
                     )}
 
@@ -1500,7 +1588,11 @@ const sizeStats = sizesSnapshot.docs.reduce<
                         <article className="product-size-card" key={size.id}>
                             <div className="product-size-info">
                                 <div>
-                                    <h5>{size.sizeName}</h5>
+                                    <h5>
+                                       {selectedProduct.sellingType === "single" && size.isDefaultSize
+                                        ? "Single Item"
+                                        : size.sizeName}
+                                    </h5>
                                     <p>
                                     <span className={`size-status-pill ${getSizeStatus(size).className}`}>
                                         {getSizeStatus(size).label}
@@ -1518,7 +1610,11 @@ const sizeStats = sizesSnapshot.docs.reduce<
                                 type="button"
                                 onClick={() => openRecipeSetup(size)}
                                 >
-                                {size.hasCompleteRecipe ? "Update Recipe" : "Setup Recipe"}
+                                {size.hasCompleteRecipe
+                                ? "Update Recipe"
+                                : selectedProduct.sellingType === "single"
+                                  ? "Setup Item Recipe"
+                                  : "Setup Recipe"}
                             </button>
 
                             <button
@@ -1526,7 +1622,7 @@ const sizeStats = sizesSnapshot.docs.reduce<
                             type="button"
                             onClick={() => openEditSizeModal(size)}
                             >
-                            Edit Size
+                            {selectedProduct.sellingType === "single" ? "Edit Price" : "Edit Size"}
                             </button>
 
                             <button
@@ -1534,7 +1630,7 @@ const sizeStats = sizesSnapshot.docs.reduce<
                             type="button"
                             onClick={() => setSizeToDeactivate(size)}
                             >
-                            Deactivate Size
+                            {selectedProduct.sellingType === "single" ? "Deactivate Item" : "Deactivate Size"}
                             </button>
                         </>
                         ) : (
@@ -1821,9 +1917,15 @@ const sizeStats = sizesSnapshot.docs.reduce<
                 >
                 <div className="size-modal-header">
                     <div>
-                    <p className="inventory-eyebrow">Edit Size</p>
+                    <p className="inventory-eyebrow">
+                      {selectedProduct.sellingType === "single" ? "Edit Single Item" : "Edit Size"}
+                    </p>
                     <h3>{selectedProduct.name}</h3>
-                    <p>Update this size name, selling price, and POS availability.</p>
+                    <p>
+                      {selectedProduct.sellingType === "single"
+                        ? "Update this item’s selling price. No size will be shown in POS."
+                        : "Update this size name, selling price, and POS availability."}
+                    </p>
                     </div>
 
                     <button
@@ -1840,15 +1942,26 @@ const sizeStats = sizesSnapshot.docs.reduce<
                     </button>
                 </div>
 
-                <div className="form-group">
+                {selectedProduct.sellingType === "single" && editingSize.isDefaultSize ? (
+                  <div className="inventory-toggle-row">
+                    <span>
+                      <strong>Single item</strong>
+                      <small>
+                        This product does not use sizes. Only the price and recipe are managed.
+                      </small>
+                    </span>
+                  </div>
+                ) : (
+                  <div className="form-group">
                     <label htmlFor="editSizeName">Size name</label>
                     <input
-                    id="editSizeName"
-                    value={editSizeName}
-                    onChange={(event) => setEditSizeName(event.target.value)}
-                    placeholder="Example: Solo, Double, Large"
+                      id="editSizeName"
+                      value={editSizeName}
+                      onChange={(event) => setEditSizeName(event.target.value)}
+                      placeholder="Example: Solo, Double, Large"
                     />
-                </div>
+                  </div>
+                )}
 
                 <div className="form-group">
                     <label htmlFor="editSizePrice">Selling price</label>
@@ -2009,8 +2122,16 @@ const sizeStats = sizesSnapshot.docs.reduce<
                         <p className="inventory-eyebrow">Recipe Setup</p>
                         <h3>{selectedProduct.name}</h3>
                         <p>
-                            Size: <strong>{selectedSize.sizeName}</strong> · Selling price:{" "}
-                            <strong>₱{selectedSize.price.toFixed(2)}</strong>
+                            {selectedProduct.sellingType === "single" && selectedSize.isDefaultSize ? (
+                              <>
+                                Single item price: <strong>₱{selectedSize.price.toFixed(2)}</strong>
+                              </>
+                            ) : (
+                              <>
+                                Size: <strong>{selectedSize.sizeName}</strong> · Selling price:{" "}
+                                <strong>₱{selectedSize.price.toFixed(2)}</strong>
+                              </>
+                            )}
                         </p>
                         {isLoadingRecipe && (
                         <p className="recipe-status-text">Loading saved recipe...</p>

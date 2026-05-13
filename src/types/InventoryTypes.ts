@@ -1,3 +1,4 @@
+export type ProductSellingType = "sized" | "single";
 export type ProductCategory =
   | "Milk Tea"
   | "Coffee"
@@ -80,6 +81,7 @@ export type Product = {
   id: string;
   name: string;
   category: ProductCategory;
+  sellingType?: ProductSellingType;
   isAvailable: boolean;
   createdAt?: Date;
   updatedAt?: Date;
@@ -93,6 +95,7 @@ export type ProductSize = {
   price: number;
   isAvailable: boolean;
   isActive?: boolean;
+  isDefaultSize?: boolean;
   hasCompleteRecipe?: boolean;
 };
 
