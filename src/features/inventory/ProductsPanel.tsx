@@ -37,6 +37,98 @@ function normalizeKey(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+async function findProductDuplicateByNameKey(
+  nameKey: string,
+  currentProductId = ""
+) {
+  const productsSnapshot = await getDocs(collection(db, "products"));
+
+  return productsSnapshot.docs.find((productDoc) => {
+    if (productDoc.id === currentProductId) {
+      return false;
+    }
+
+    const productData = productDoc.data();
+
+    const existingNameKey =
+      productData.nameKey || normalizeKey(productData.name || "");
+
+    return existingNameKey === nameKey;
+  });
+}
+
+async function findActiveProductDuplicateByNameKey(
+  nameKey: string,
+  currentProductId = ""
+) {
+  const productsSnapshot = await getDocs(collection(db, "products"));
+
+  return productsSnapshot.docs.find((productDoc) => {
+    if (productDoc.id === currentProductId) {
+      return false;
+    }
+
+    const productData = productDoc.data();
+
+    const existingNameKey =
+      productData.nameKey || normalizeKey(productData.name || "");
+
+    return existingNameKey === nameKey && productData.isActive !== false;
+  });
+}
+
+async function findProductSizeDuplicateBySizeKey(
+  productId: string,
+  sizeKey: string,
+  currentSizeId = ""
+) {
+  const sizesQuery = query(
+    collection(db, "productSizes"),
+    where("productId", "==", productId)
+  );
+
+  const sizesSnapshot = await getDocs(sizesQuery);
+
+  return sizesSnapshot.docs.find((sizeDoc) => {
+    if (sizeDoc.id === currentSizeId) {
+      return false;
+    }
+
+    const sizeData = sizeDoc.data();
+
+    const existingSizeKey =
+      sizeData.sizeKey || normalizeKey(sizeData.sizeName || "");
+
+    return existingSizeKey === sizeKey;
+  });
+}
+
+async function findActiveProductSizeDuplicateBySizeKey(
+  productId: string,
+  sizeKey: string,
+  currentSizeId = ""
+) {
+  const sizesQuery = query(
+    collection(db, "productSizes"),
+    where("productId", "==", productId)
+  );
+
+  const sizesSnapshot = await getDocs(sizesQuery);
+
+  return sizesSnapshot.docs.find((sizeDoc) => {
+    if (sizeDoc.id === currentSizeId) {
+      return false;
+    }
+
+    const sizeData = sizeDoc.data();
+
+    const existingSizeKey =
+      sizeData.sizeKey || normalizeKey(sizeData.sizeName || "");
+
+    return existingSizeKey === sizeKey && sizeData.isActive !== false;
+  });
+}
+
 function ProductsPanel() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -437,24 +529,20 @@ const sizeStats = sizesSnapshot.docs.reduce<
         setFormMessage("Checking product...");
 
         try {
-            const allProductsSnapshot = await getDocs(collection(db, "products"));
-
-            const duplicateProduct = allProductsSnapshot.docs.find((productDoc) => {
-            if (productDoc.id === selectedProduct.id) {
-                return false;
-            }
-
-            const productData = productDoc.data();
-
-            const existingNameKey =
-                productData.nameKey || normalizeKey(productData.name || "");
-
-            return existingNameKey === nameKey && productData.isActive !== false;
-            });
+            const duplicateProduct = await findProductDuplicateByNameKey(
+              nameKey,
+              selectedProduct.id
+            );
 
             if (duplicateProduct) {
-            setFormMessage(`${trimmedName} already exists in your active products.`);
-            return;
+              const duplicateData = duplicateProduct.data();
+              const duplicateStatus =
+                duplicateData.isActive === false ? "inactive" : "active";
+
+              setFormMessage(
+                `${trimmedName} already exists as an ${duplicateStatus} product. Use the existing product instead of creating a duplicate.`
+              );
+              return;
             }
 
             setFormMessage("Saving changes...");
@@ -602,23 +690,41 @@ const sizeStats = sizesSnapshot.docs.reduce<
     }
 
   async function handleRestoreProduct(product: Product) {
+      setFormMessage("Checking product...");
+
+      try {
+        const nameKey = normalizeKey(product.name);
+
+        const activeDuplicate = await findActiveProductDuplicateByNameKey(
+          nameKey,
+          product.id
+        );
+
+        if (activeDuplicate) {
+          const activeDuplicateData = activeDuplicate.data();
+
+          setFormMessage(
+            `Cannot restore ${product.name}. Active product "${activeDuplicateData.name}" already exists. Deactivate or rename the active duplicate first.`
+          );
+          return;
+        }
+
         setFormMessage("Restoring product...");
 
-        try {
-            await updateDoc(doc(db, "products", product.id), {
-            isActive: true,
-            isAvailable: true,
-            nameKey: normalizeKey(product.name),
-            updatedAt: serverTimestamp(),
-            });
+        await updateDoc(doc(db, "products", product.id), {
+          isActive: true,
+          isAvailable: true,
+          nameKey,
+          updatedAt: serverTimestamp(),
+        });
 
-            closeProductDetails();
-            showTemporaryMessage("Product restored successfully.");
-            await loadProducts();
-        } catch (error) {
-            console.error(error);
-            setFormMessage("Failed to restore product. Please try again.");
-        }
+        closeProductDetails();
+        showTemporaryMessage("Product restored successfully.");
+        await loadProducts();
+      } catch (error) {
+        console.error(error);
+        setFormMessage("Failed to restore product. Please try again.");
+      }
     }
 
   async function handleAddProductSize(event: React.FormEvent<HTMLFormElement>) {
@@ -646,27 +752,19 @@ const sizeStats = sizesSnapshot.docs.reduce<
         setFormMessage("Checking size...");
 
         try {
-            const existingSizesQuery = query(
-            collection(db, "productSizes"),
-            where("productId", "==", selectedProduct.id)
+            const duplicateSize = await findProductSizeDuplicateBySizeKey(
+              selectedProduct.id,
+              sizeKey
             );
-
-            const existingSizesSnapshot = await getDocs(existingSizesQuery);
-
-            const duplicateSize = existingSizesSnapshot.docs.some((sizeDoc) => {
-            const sizeData = sizeDoc.data();
-
-            const existingSizeKey =
-                sizeData.sizeKey || normalizeKey(sizeData.sizeName || "");
-
-            return existingSizeKey === sizeKey && sizeData.isActive !== false;
-            });
 
             if (duplicateSize) {
-            setFormMessage(
-                `${trimmedSizeName} already exists for ${selectedProduct.name}. Use a different size name.`
-            );
-            return;
+              const duplicateData = duplicateSize.data();
+              const duplicateStatus = duplicateData.isActive === false ? "inactive" : "active";
+
+              setFormMessage(
+                `${trimmedSizeName} already exists as an ${duplicateStatus} size for ${selectedProduct.name}. Use the existing size instead of creating a duplicate.`
+              );
+              return;
             }
 
             setFormMessage("Saving size...");
@@ -876,31 +974,20 @@ const sizeStats = sizesSnapshot.docs.reduce<
             setFormMessage("Checking size...");
 
             try {
-                const existingSizesQuery = query(
-                collection(db, "productSizes"),
-                where("productId", "==", selectedProduct.id)
+                const duplicateSize = await findProductSizeDuplicateBySizeKey(
+                  selectedProduct.id,
+                  sizeKey,
+                  editingSize.id
                 );
-
-                const existingSizesSnapshot = await getDocs(existingSizesQuery);
-
-                const duplicateSize = existingSizesSnapshot.docs.some((sizeDoc) => {
-                if (sizeDoc.id === editingSize.id) {
-                    return false;
-                }
-
-                const sizeData = sizeDoc.data();
-
-                const existingSizeKey =
-                    sizeData.sizeKey || normalizeKey(sizeData.sizeName || "");
-
-                return existingSizeKey === sizeKey && sizeData.isActive !== false;
-                });
 
                 if (duplicateSize) {
-                setFormMessage(
-                    `${trimmedSizeName} already exists for ${selectedProduct.name}. Use a different size name.`
-                );
-                return;
+                  const duplicateData = duplicateSize.data();
+                  const duplicateStatus = duplicateData.isActive === false ? "inactive" : "active";
+
+                  setFormMessage(
+                    `${trimmedSizeName} already exists as an ${duplicateStatus} size for ${selectedProduct.name}. Use the existing size instead of creating a duplicate.`
+                  );
+                  return;
                 }
 
                 setFormMessage("Saving size changes...");
@@ -980,98 +1067,87 @@ const sizeStats = sizesSnapshot.docs.reduce<
             setFormMessage("Checking size...");
 
             try {
-                const existingSizesQuery = query(
-                collection(db, "productSizes"),
-                where("productId", "==", selectedProduct.id)
-                );
-
-                const existingSizesSnapshot = await getDocs(existingSizesQuery);
                 const sizeKey = normalizeKey(size.sizeName);
 
-                const activeDuplicate = existingSizesSnapshot.docs.some((sizeDoc) => {
-                if (sizeDoc.id === size.id) {
-                    return false;
-                }
-
-                const sizeData = sizeDoc.data();
-
-                const existingSizeKey =
-                    sizeData.sizeKey || normalizeKey(sizeData.sizeName || "");
-
-                return existingSizeKey === sizeKey && sizeData.isActive !== false;
-                });
+                const activeDuplicate = await findActiveProductSizeDuplicateBySizeKey(
+                  selectedProduct.id,
+                  sizeKey,
+                  size.id
+                );
 
                 if (activeDuplicate) {
-                setFormMessage(
-                    `${size.sizeName} already exists as an active size. Rename or deactivate the active one first.`
-                );
-                return;
+                  const activeDuplicateData = activeDuplicate.data();
+
+                  setFormMessage(
+                    `Cannot restore ${size.sizeName}. Active size "${activeDuplicateData.sizeName}" already exists for ${selectedProduct.name}. Deactivate or rename the active duplicate first.`
+                  );
+                  return;
                 }
 
                 setFormMessage("Restoring size...");
 
                 const recipeRef = doc(db, "recipes", size.id);
-const recipeSnapshot = await getDoc(recipeRef);
+                const recipeSnapshot = await getDoc(recipeRef);
 
-const hasCompleteRecipe =
-  recipeSnapshot.exists() &&
-  recipeSnapshot.data().isComplete === true &&
-  Array.isArray(recipeSnapshot.data().ingredients) &&
-  recipeSnapshot.data().ingredients.length > 0;
+                const hasCompleteRecipe =
+                  recipeSnapshot.exists() &&
+                  recipeSnapshot.data().isComplete === true &&
+                  Array.isArray(recipeSnapshot.data().ingredients) &&
+                  recipeSnapshot.data().ingredients.length > 0;
 
-await updateDoc(doc(db, "productSizes", size.id), {
-  isActive: true,
-  isAvailable: hasCompleteRecipe,
-  sizeKey,
-  updatedAt: serverTimestamp(),
-});
+                await updateDoc(doc(db, "productSizes", size.id), {
+                  isActive: true,
+                  isAvailable: hasCompleteRecipe,
+                  sizeKey,
+                  updatedAt: serverTimestamp(),
+                });
 
-setSizeStatusFilter("active");
+                setSizeStatusFilter("active");
 
-await loadProductSizes(selectedProduct.id, "active");
-await loadProducts();
+                await loadProductSizes(selectedProduct.id, "active");
+                await loadProducts();
 
-showTemporaryMessage(
-  hasCompleteRecipe
-    ? "Size restored and ready for POS."
-    : "Size restored. Set up its recipe before selling."
-);
-            } catch (error) {
-                console.error(error);
-                setFormMessage("Failed to restore size. Please try again.");
-            } finally {
-                setIsDeactivatingSize(false);
-            }
-        }
+                showTemporaryMessage(
+                  hasCompleteRecipe
+                    ? "Size restored and ready for POS."
+                    : "Size restored. Set up its recipe before selling."
+                );
+                            } catch (error) {
+                                console.error(error);
+                                setFormMessage("Failed to restore size. Please try again.");
+                            } finally {
+                                setIsDeactivatingSize(false);
+                            }
+                        }
 
 
-        function getSizeStatus(size: ProductSize) {
-  if (size.isActive === false) {
-    return {
-      label: "Archived",
-      className: "unavailable",
-    };
-  }
+                        function getSizeStatus(size: ProductSize) {
+                  if (size.isActive === false) {
+                    return {
+                      label: "Archived",
+                      className: "unavailable",
+                    };
+                  }
 
-  if (!size.hasCompleteRecipe) {
-    return {
-      label: "Needs Recipe",
-      className: "unavailable",
-    };
-  }
+                  if (!size.hasCompleteRecipe) {
+                    return {
+                      label: "Needs Recipe",
+                      className: "unavailable",
+                    };
+                  }
 
-  if (!size.isAvailable) {
-    return {
-      label: "Turned Off",
-      className: "unavailable",
-    };
-  }
+                  if (!size.isAvailable) {
+                    return {
+                      label: "Turned Off",
+                      className: "unavailable",
+                    };
+                  }
 
-  return {
-    label: "Ready for POS",
-    className: "available",
-  };
-}
+                  return {
+                    label: "Ready for POS",
+                    className: "available",
+                  };
+                }
 
         function getProductListStatus(product: Product) {
   const sizeStats = productSizeStats[product.id] || {
