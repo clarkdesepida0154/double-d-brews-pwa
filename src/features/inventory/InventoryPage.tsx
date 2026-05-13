@@ -5,9 +5,15 @@ import InventoryHealthSummary from "./InventoryHealthSummary";
 import LowStockPanel from "./LowStockPanel";
 import ProductsPanel from "./ProductsPanel";
 import RecipesPanel from "./RecipesPanel";
+import InventoryAuditPanel from "./InventoryAuditPanel";
 import type { UserProfile } from "../../types/UserProfile";
 
-type InventoryTab = "ingredients" | "products" | "recipes" | "low-stock";
+type InventoryTab =
+  | "ingredients"
+  | "products"
+  | "recipes"
+  | "low-stock"
+  | "audit";
 
 type InventoryPageProps = {
   userRole?: "developer" | "owner" | "staff";
@@ -21,7 +27,7 @@ function InventoryPage({ userRole = "owner", userProfile }: InventoryPageProps) 
   const isStaffMode = userRole === "staff";
 
   function openInventoryTab(tab: InventoryTab) {
-    if (isStaffMode && (tab === "products" || tab === "recipes")) {
+    if (isStaffMode && (tab === "products" || tab === "recipes" || tab === "audit")) {
       setActiveTab("ingredients");
       return;
     }
@@ -95,6 +101,17 @@ function InventoryPage({ userRole = "owner", userProfile }: InventoryPageProps) 
         >
           Low Stock
         </button>
+        
+        {!isStaffMode && (
+          <button
+            className={`inventory-tab-button ${activeTab === "audit" ? "active" : ""}`}
+            type="button"
+            onClick={() => openInventoryTab("audit")}
+          >
+            Audit
+          </button>
+        )}
+
       </div>
 
       <div className="inventory-panel">
@@ -102,6 +119,7 @@ function InventoryPage({ userRole = "owner", userProfile }: InventoryPageProps) 
         {activeTab === "products" && !isStaffMode && <ProductsPanel userProfile={userProfile} /> }
         {activeTab === "recipes" && !isStaffMode && <RecipesPanel />}
         {activeTab === "low-stock" && <LowStockPanel userProfile={userProfile} />}
+        {activeTab === "audit" && !isStaffMode && <InventoryAuditPanel />}
       </div>
 
       {!isStaffMode && isHealthModalOpen && (
