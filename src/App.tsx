@@ -7,8 +7,13 @@ function App() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   if (userProfile) {
-    return <DashboardPage userProfile={userProfile} />;
-  }
+  return (
+    <DashboardPage
+      userProfile={userProfile}
+      onLogout={() => setUserProfile(null)}
+    />
+  );
+}
 
   return <LoginPage onLoginSuccess={setUserProfile} />;
 }

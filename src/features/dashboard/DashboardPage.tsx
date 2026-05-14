@@ -5,7 +5,8 @@ import {
   orderBy,
   query,
 } from "firebase/firestore";
-import { db } from "../../firebase/config.ts";
+import { signOut } from "firebase/auth";
+import { auth, db } from "../../firebase/config.ts";
 import type { UserProfile } from "../../types/UserProfile";
 import type { AppPage } from "../../types/AppPage";
 import PosPage from "../pos/PosPage";
@@ -18,6 +19,7 @@ import "./DashboardPage.css";
 
 type DashboardPageProps = {
   userProfile: UserProfile;
+  onLogout: () => void;
 };
 
 type DashboardRole = "developer" | "owner" | "staff";
@@ -220,7 +222,7 @@ function getDashboardSaleDate(sale: DashboardSale) {
   return null;
 }
 
-function DashboardPage({ userProfile }: DashboardPageProps) {
+function DashboardPage({ userProfile, onLogout }: DashboardPageProps) {
   const userRole = normalizeDashboardRole(String(userProfile.role || "owner"));
   const allowedPages = roleAccess[userRole];
 
@@ -228,6 +230,9 @@ function DashboardPage({ userProfile }: DashboardPageProps) {
   const [currentPage, setCurrentPage] = useState<AppPage>(() =>
     getDefaultPage(userRole)
   );
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [logoutMessage, setLogoutMessage] = useState("");
   const [dashboardSales, setDashboardSales] = useState<DashboardSale[]>([]);
   const [dashboardIngredients, setDashboardIngredients] = useState<DashboardIngredient[]>([]);
   const [isDashboardLoading, setIsDashboardLoading] = useState(false);
@@ -363,6 +368,31 @@ function DashboardPage({ userProfile }: DashboardPageProps) {
     setIsSidebarOpen(false);
   }
 
+  function requestLogout() {
+  setIsSidebarOpen(false);
+  setLogoutMessage("");
+  setIsLogoutConfirmOpen(true);
+}
+
+async function handleConfirmLogout() {
+    if (isLoggingOut) {
+      return;
+    }
+
+    setIsLoggingOut(true);
+    setLogoutMessage("Logging out...");
+
+    try {
+      await signOut(auth);
+      onLogout();
+    } catch (error) {
+      console.error(error);
+      setLogoutMessage("Logout failed. Please try again.");
+    } finally {
+      setIsLoggingOut(false);
+    }
+  }
+
   function openPage(page: AppPage) {
     if (!allowedPages.includes(page)) {
       setCurrentPage(getDefaultPage(userRole));
@@ -414,7 +444,11 @@ function DashboardPage({ userProfile }: DashboardPageProps) {
         </nav>
 
         <div className="dashboard-sidebar-footer">
-          <button className="dashboard-logout-button" type="button">
+          <button
+            className="dashboard-logout-button"
+            type="button"
+            onClick={requestLogout}
+          >
             Logout
           </button>
         </div>
@@ -613,7 +647,62 @@ function DashboardPage({ userProfile }: DashboardPageProps) {
             </button>
           </section>
         )}
-      </section>
+            </section>
+
+      {isLogoutConfirmOpen && (
+        <div
+          className="dashboard-logout-modal-overlay"
+          onClick={() => {
+            if (!isLoggingOut) {
+              setIsLogoutConfirmOpen(false);
+              setLogoutMessage("");
+            }
+          }}
+        >
+          <section
+            className="dashboard-logout-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="dashboard-logout-modal-icon">↪</div>
+
+            <div>
+              <p className="dashboard-kicker">Confirm Logout</p>
+              <h3>Log out of Double D&apos;Brews?</h3>
+              <p>
+                You will return to the login screen. Any unfinished POS transaction
+                should be completed or cleared before logging out.
+              </p>
+            </div>
+
+            {logoutMessage && (
+              <p className="dashboard-logout-message">{logoutMessage}</p>
+            )}
+
+            <div className="dashboard-logout-modal-actions">
+              <button
+                type="button"
+                className="dashboard-logout-confirm-button"
+                onClick={handleConfirmLogout}
+                disabled={isLoggingOut}
+              >
+                {isLoggingOut ? "Logging out..." : "Yes, Log Out"}
+              </button>
+
+              <button
+                type="button"
+                className="dashboard-logout-cancel-button"
+                onClick={() => {
+                  setIsLogoutConfirmOpen(false);
+                  setLogoutMessage("");
+                }}
+                disabled={isLoggingOut}
+              >
+                Cancel
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

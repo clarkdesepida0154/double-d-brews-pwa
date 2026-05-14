@@ -573,3 +573,117 @@
     padding: 18px;
   }
 }
+
+/* =========================
+   Themed Logout Confirmation
+========================= */
+
+.dashboard-logout-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(41, 24, 14, 0.58);
+  backdrop-filter: blur(8px);
+}
+
+.dashboard-logout-modal {
+  width: min(94vw, 430px);
+  border: 1px solid rgba(92, 55, 31, 0.16);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at top left, rgba(255, 244, 216, 0.9), transparent 36%),
+    linear-gradient(180deg, #fffdf9 0%, #fff3df 100%);
+  box-shadow: 0 28px 80px rgba(35, 18, 8, 0.34);
+  padding: 22px;
+  color: #321d12;
+}
+
+.dashboard-logout-modal-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 226, 220, 0.95);
+  color: #9f261a;
+  font-size: 24px;
+  font-weight: 1000;
+  margin-bottom: 14px;
+}
+
+.dashboard-logout-modal h3 {
+  margin: 0;
+  color: #321d12;
+  font-size: 22px;
+  font-weight: 1000;
+  line-height: 1.15;
+}
+
+.dashboard-logout-modal p {
+  margin: 8px 0 0;
+  color: #76563b;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.dashboard-logout-message {
+  border: 1px solid rgba(92, 55, 31, 0.14);
+  border-radius: 16px;
+  background: rgba(244, 231, 211, 0.72);
+  padding: 12px;
+  color: #4a2c1a !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+}
+
+.dashboard-logout-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+.dashboard-logout-confirm-button,
+.dashboard-logout-cancel-button {
+  border-radius: 999px;
+  padding: 12px 16px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 1000;
+  cursor: pointer;
+}
+
+.dashboard-logout-confirm-button {
+  border: none;
+  background: linear-gradient(180deg, #b95042, #7e2d24);
+  color: #fffaf2;
+  box-shadow: 0 10px 20px rgba(126, 45, 36, 0.18);
+}
+
+.dashboard-logout-cancel-button {
+  border: 1px solid rgba(92, 55, 31, 0.16);
+  background: #fffaf2;
+  color: #4b2b18;
+}
+
+.dashboard-logout-confirm-button:disabled,
+.dashboard-logout-cancel-button:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
+@media (max-width: 520px) {
+  .dashboard-logout-modal-actions {
+    display: grid;
+  }
+
+  .dashboard-logout-confirm-button,
+  .dashboard-logout-cancel-button {
+    width: 100%;
+  }
+}
