@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { sendPasswordResetEmail } from "firebase/auth";
-import { auth } from "../../firebase/config";
+import { auth } from "../../firebase/config.ts";
 import type { UserProfile } from "../../types/UserProfile";
 import "./SettingsPage.css";
 import { writeActivityLog } from "../../utils/activityLogUtils";

@@ -5,7 +5,7 @@ import {
   orderBy,
   query,
 } from "firebase/firestore";
-import { db } from "../../firebase/config";
+import { db } from "../../firebase/config.ts";
 import type { UserProfile } from "../../types/UserProfile";
 import type { AppPage } from "../../types/AppPage";
 import PosPage from "../pos/PosPage";

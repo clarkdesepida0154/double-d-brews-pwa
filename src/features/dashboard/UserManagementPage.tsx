@@ -1,15 +1,29 @@
+import { initializeApp, deleteApp } from "firebase/app";
+import {
+  createUserWithEmailAndPassword,
+  getAuth,
+  sendPasswordResetEmail,
+  signOut,
+} from "firebase/auth";
 import { useEffect, useMemo, useState } from "react";
 import {
+  addDoc,
   collection,
+  doc,
+  getDoc,
   getDocs,
   limit,
   orderBy,
   query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
 } from "firebase/firestore";
-import { db } from "../../firebase/config";
+import { auth, db, firebaseConfig } from "../../firebase/config";
 import "./UserManagementPage.css";
 
 type ManagedUserRole = "developer" | "owner" | "staff";
+type EditableUserRole = "owner" | "staff";
 
 type UserStatusFilter = "all" | "active" | "inactive";
 type UserRoleFilter = "all" | ManagedUserRole;
@@ -55,6 +69,13 @@ type ActivityLog = {
   createdAt?: FirestoreDateValue;
 };
 
+type CurrentActor = {
+  uid: string;
+  name: string;
+  email: string;
+  role: ManagedUserRole;
+};
+
 function normalizeUserRole(role: string): ManagedUserRole {
   const normalizedRole = role.trim().toLowerCase();
 
@@ -85,6 +106,10 @@ function getRoleLabel(role: ManagedUserRole) {
   }
 
   return "Owner";
+}
+
+function getEditableRoleLabel(role: EditableUserRole) {
+  return role === "owner" ? "Owner" : "Staff Operator";
 }
 
 function getUserCreatedDate(user: ManagedUser) {
@@ -223,72 +248,78 @@ function getActionLabel(actionType: string) {
 }
 
 function formatMetadataLabel(key: string) {
-    const labels: Record<string, string> = {
-      paperSize: "Paper Size",
-      receiptCopies: "Receipt Copies",
-      autoPrintAfterSale: "Auto Print",
-      printerMode: "Printer Mode",
-      email: "Email",
+  const labels: Record<string, string> = {
+    paperSize: "Paper Size",
+    receiptCopies: "Receipt Copies",
+    autoPrintAfterSale: "Auto Print",
+    printerMode: "Printer Mode",
+    email: "Email",
 
-      saleNumber: "Sale Number",
-      totalAmount: "Total Amount",
-      paymentMethod: "Payment Method",
-      itemCount: "Total Items",
-      totalItems: "Total Items",
-      cashReceived: "Cash Received",
-      changeAmount: "Change",
-      voidReason: "Void Reason",
-      voidNote: "Void Note",
-      stockRestored: "Stock Restored",
-      stockMovement: "Stock Movement",
+    userName: "User",
+    previousRole: "Previous Role",
+    newRole: "New Role",
+    accountStatus: "Account Status",
+    passwordSetupRequired: "Password Setup Required",
 
-      ingredientName: "Ingredient",
-      previousIngredientName: "Previous Name",
-      newIngredientName: "New Name",
-      ingredientStatus: "Ingredient Status",
-      purchaseQuantity: "Quantity Added",
-      quantityAdded: "Quantity Added",
-      purchaseUnit: "Purchase Unit",
-      usageUnit: "Stock Unit",
-      usagePerPurchaseUnit: "Usage Per Purchase Unit",
-      usageAmountAdded: "Stock Added",
-      purchaseCost: "Purchase Cost",
-      costPerUsageUnit: "Cost Per Usage Unit",
-      currentStock: "Current Stock",
-      previousStock: "Previous Stock",
-      newStock: "New Stock",
-      minThreshold: "Low Stock Level",
-      restockSource: "Restock Source",
-      restockNote: "Restock Note",
-      actionSource: "Action Source",
+    saleNumber: "Sale Number",
+    totalAmount: "Total Amount",
+    paymentMethod: "Payment Method",
+    itemCount: "Total Items",
+    totalItems: "Total Items",
+    cashReceived: "Cash Received",
+    changeAmount: "Change",
+    voidReason: "Void Reason",
+    voidNote: "Void Note",
+    stockRestored: "Stock Restored",
+    stockMovement: "Stock Movement",
 
-      productName: "Product",
-      previousProductName: "Previous Product Name",
-      newProductName: "New Product Name",
-      productCategory: "Category",
-      previousCategory: "Previous Category",
-      newCategory: "New Category",
-      sellingType: "Selling Type",
-      productStatus: "Product Status",
-      productAvailable: "Product Available",
-      singleItemPrice: "Single Item Price",
-      defaultSingleItemSizeId: "Single Item Setup ID",
+    ingredientName: "Ingredient",
+    previousIngredientName: "Previous Name",
+    newIngredientName: "New Name",
+    ingredientStatus: "Ingredient Status",
+    purchaseQuantity: "Quantity Added",
+    quantityAdded: "Quantity Added",
+    purchaseUnit: "Purchase Unit",
+    usageUnit: "Stock Unit",
+    usagePerPurchaseUnit: "Usage Per Purchase Unit",
+    usageAmountAdded: "Stock Added",
+    purchaseCost: "Purchase Cost",
+    costPerUsageUnit: "Cost Per Usage Unit",
+    currentStock: "Current Stock",
+    previousStock: "Previous Stock",
+    newStock: "New Stock",
+    minThreshold: "Low Stock Level",
+    restockSource: "Restock Source",
+    restockNote: "Restock Note",
+    actionSource: "Action Source",
 
-      sizeName: "Size",
-      previousSizeName: "Previous Size",
-      newSizeName: "New Size",
-      price: "Price",
-      previousPrice: "Previous Price",
-      newPrice: "New Price",
-      sizeStatus: "Size Status",
-      sizeAvailable: "Size Available",
-      hasCompleteRecipe: "Recipe Completed",
+    productName: "Product",
+    previousProductName: "Previous Product Name",
+    newProductName: "New Product Name",
+    productCategory: "Category",
+    previousCategory: "Previous Category",
+    newCategory: "New Category",
+    sellingType: "Selling Type",
+    productStatus: "Product Status",
+    productAvailable: "Product Available",
+    singleItemPrice: "Single Item Price",
+    defaultSingleItemSizeId: "Single Item Setup ID",
 
-      ingredientCount: "Ingredient Count",
-      totalRecipeCost: "Recipe Cost",
-      estimatedProfit: "Estimated Profit",
+    sizeName: "Size",
+    previousSizeName: "Previous Size",
+    newSizeName: "New Size",
+    price: "Price",
+    previousPrice: "Previous Price",
+    newPrice: "New Price",
+    sizeStatus: "Size Status",
+    sizeAvailable: "Size Available",
+    hasCompleteRecipe: "Recipe Completed",
 
-      unit: "Unit",
+    ingredientCount: "Ingredient Count",
+    totalRecipeCost: "Recipe Cost",
+    estimatedProfit: "Estimated Profit",
+
+    unit: "Unit",
   };
 
   return labels[key] || key.replace(/([A-Z])/g, " $1").replace(/^./, (letter) =>
@@ -305,12 +336,20 @@ function formatMetadataValue(key: string, value: unknown) {
     if (
       key === "productAvailable" ||
       key === "sizeAvailable" ||
-      key === "hasCompleteRecipe"
+      key === "hasCompleteRecipe" ||
+      key === "passwordSetupRequired"
     ) {
       return value ? "Yes" : "No";
     }
 
     return value ? "Enabled" : "Disabled";
+  }
+
+  if (
+    (key === "previousRole" || key === "newRole") &&
+    typeof value === "string"
+  ) {
+    return getRoleLabel(normalizeUserRole(value));
   }
 
   if (key === "sellingType" && typeof value === "string") {
@@ -332,21 +371,21 @@ function formatMetadataValue(key: string, value: unknown) {
   }
 
   if (
-  (key === "totalAmount" ||
-    key === "cashReceived" ||
-    key === "changeAmount" ||
-    key === "purchaseCost" ||
-    key === "costPerUsageUnit" ||
-    key === "singleItemPrice" ||
-    key === "price" ||
-    key === "previousPrice" ||
-    key === "newPrice" ||
-    key === "totalRecipeCost" ||
-    key === "estimatedProfit") &&
-  typeof value === "number"
-) {
-  return `₱${value.toFixed(2)}`;
-}
+    (key === "totalAmount" ||
+      key === "cashReceived" ||
+      key === "changeAmount" ||
+      key === "purchaseCost" ||
+      key === "costPerUsageUnit" ||
+      key === "singleItemPrice" ||
+      key === "price" ||
+      key === "previousPrice" ||
+      key === "newPrice" ||
+      key === "totalRecipeCost" ||
+      key === "estimatedProfit") &&
+    typeof value === "number"
+  ) {
+    return `₱${value.toFixed(2)}`;
+  }
 
   if (
     (key === "currentStock" ||
@@ -355,15 +394,6 @@ function formatMetadataValue(key: string, value: unknown) {
       key === "newStock" ||
       key === "usageAmountAdded" ||
       key === "usagePerPurchaseUnit") &&
-    typeof value === "number"
-  ) {
-    return String(value);
-  }
-
-  if (
-    (key === "previousStock" ||
-      key === "newStock" ||
-      key === "usageAmountAdded") &&
     typeof value === "number"
   ) {
     return String(value);
@@ -385,6 +415,33 @@ function getReadableActivityDetails(activityLog: ActivityLog) {
     .filter((detail) => detail.value.trim().length > 0);
 }
 
+function createTemporaryPassword() {
+  const randomPart = crypto.randomUUID().replace(/-/g, "");
+  return `${randomPart}Aa1!`;
+}
+
+function getFriendlyAuthError(error: unknown) {
+  const errorCode = String((error as { code?: string })?.code || "");
+
+  if (errorCode.includes("email-already-in-use")) {
+    return "This email already has an account.";
+  }
+
+  if (errorCode.includes("invalid-email")) {
+    return "Please enter a valid email address.";
+  }
+
+  if (errorCode.includes("weak-password")) {
+    return "The temporary password was rejected. Please try again.";
+  }
+
+  if (errorCode.includes("permission-denied")) {
+    return "Permission denied. Check Firestore rules or use an owner account.";
+  }
+
+  return "Something went wrong. Please try again.";
+}
+
 function UserManagementPage() {
   const [activeTab, setActiveTab] = useState<UserManagementTab>("users");
 
@@ -400,7 +457,106 @@ function UserManagementPage() {
     useState<ActivityActionFilter>("all");
   const [isLoadingActivity, setIsLoadingActivity] = useState(false);
 
+  const [currentActor, setCurrentActor] = useState<CurrentActor | null>(null);
   const [message, setMessage] = useState("");
+
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserRole, setNewUserRole] = useState<EditableUserRole>("staff");
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
+
+  const [selectedUser, setSelectedUser] = useState<ManagedUser | null>(null);
+  const [selectedUserRole, setSelectedUserRole] =
+    useState<EditableUserRole>("staff");
+  const [isSavingUserAction, setIsSavingUserAction] = useState(false);
+
+  async function loadCurrentActor() {
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      setCurrentActor(null);
+      return;
+    }
+
+    const actorSnapshot = await getDoc(doc(db, "users", currentUser.uid));
+
+    if (!actorSnapshot.exists()) {
+      setCurrentActor({
+        uid: currentUser.uid,
+        name: currentUser.email || "Current user",
+        email: currentUser.email || "",
+        role: "staff",
+      });
+      return;
+    }
+
+    const actorData = actorSnapshot.data();
+
+    setCurrentActor({
+      uid: currentUser.uid,
+      name: String(actorData.name || actorData.displayName || currentUser.email || "User"),
+      email: String(actorData.email || currentUser.email || ""),
+      role: normalizeUserRole(String(actorData.role || "staff")),
+    });
+  }
+
+  function resetCreateForm() {
+    setNewUserName("");
+    setNewUserEmail("");
+    setNewUserRole("staff");
+  }
+
+  function openCreateModal() {
+    resetCreateForm();
+    setMessage("");
+    setIsCreateModalOpen(true);
+  }
+
+  function openUserActionModal(user: ManagedUser) {
+    setSelectedUser(user);
+    setSelectedUserRole(user.role === "owner" ? "owner" : "staff");
+    setMessage("");
+  }
+
+  function closeUserActionModal() {
+    setSelectedUser(null);
+    setSelectedUserRole("staff");
+    setMessage("");
+  }
+
+  function canManageUsers() {
+    return currentActor?.role === "owner" || currentActor?.role === "developer";
+  }
+
+  function isProtectedUser(user: ManagedUser) {
+    return user.role === "developer" || user.uid === currentActor?.uid;
+  }
+
+  async function writeUserManagementLog(input: {
+    actionType: string;
+    targetId: string;
+    targetName: string;
+    description: string;
+    metadata: Record<string, unknown>;
+  }) {
+    if (!currentActor) {
+      return;
+    }
+
+    await addDoc(collection(db, "activityLogs"), {
+      actionType: input.actionType,
+      actorId: currentActor.uid,
+      actorName: currentActor.name || currentActor.email || "Unknown user",
+      actorRole: currentActor.role,
+      targetId: input.targetId,
+      targetName: input.targetName,
+      description: input.description,
+      metadata: input.metadata,
+      createdAt: serverTimestamp(),
+      createdAtText: new Date().toISOString(),
+    });
+  }
 
   async function loadUsers() {
     setIsLoading(true);
@@ -429,10 +585,15 @@ function UserManagementPage() {
       });
 
       loadedUsers.sort((firstUser, secondUser) => {
-        const firstName = firstUser.name.toLowerCase();
-        const secondName = secondUser.name.toLowerCase();
+        if (firstUser.role === "developer") {
+          return -1;
+        }
 
-        return firstName.localeCompare(secondName);
+        if (secondUser.role === "developer") {
+          return 1;
+        }
+
+        return firstUser.name.toLowerCase().localeCompare(secondUser.name.toLowerCase());
       });
 
       setUsers(loadedUsers);
@@ -496,10 +657,249 @@ function UserManagementPage() {
     }
   }
 
+  async function refreshEverything() {
+    await Promise.all([loadCurrentActor(), loadUsers(), loadActivityLogs()]);
+  }
+
   useEffect(() => {
-    loadUsers();
-    loadActivityLogs();
+    refreshEverything();
   }, []);
+
+  async function handleCreateUser(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!canManageUsers() || isCreatingUser) {
+      setMessage("Only an owner can create user accounts.");
+      return;
+    }
+
+    const cleanName = newUserName.trim();
+    const cleanEmail = newUserEmail.trim().toLowerCase();
+
+    if (!cleanName) {
+      setMessage("Enter the user's name.");
+      return;
+    }
+
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+      setMessage("Enter a valid email address.");
+      return;
+    }
+
+    setIsCreatingUser(true);
+    setMessage("Creating account...");
+
+    const secondaryAppName = `secondary-user-creation-${Date.now()}`;
+    const secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
+    const secondaryAuth = getAuth(secondaryApp);
+    const temporaryPassword = createTemporaryPassword();
+
+    try {
+      const createdCredential = await createUserWithEmailAndPassword(
+        secondaryAuth,
+        cleanEmail,
+        temporaryPassword
+      );
+
+      const createdUser = createdCredential.user;
+
+      await setDoc(doc(db, "users", createdUser.uid), {
+        uid: createdUser.uid,
+        name: cleanName,
+        displayName: cleanName,
+        email: cleanEmail,
+        role: newUserRole,
+        isActive: true,
+        status: "active",
+        createdAt: serverTimestamp(),
+        createdAtText: new Date().toISOString(),
+        updatedAt: serverTimestamp(),
+        updatedAtText: new Date().toISOString(),
+        createdBy: currentActor?.uid || "",
+        createdByName: currentActor?.name || currentActor?.email || "",
+      });
+
+      await sendPasswordResetEmail(secondaryAuth, cleanEmail);
+
+      await writeUserManagementLog({
+        actionType: "user.created",
+        targetId: createdUser.uid,
+        targetName: cleanName,
+        description: `${currentActor?.name || "An owner"} created account for ${cleanName}.`,
+        metadata: {
+          userName: cleanName,
+          email: cleanEmail,
+          newRole: newUserRole,
+          accountStatus: "Active",
+          passwordSetupRequired: true,
+          actionSource: "User Management",
+        },
+      });
+
+      await signOut(secondaryAuth);
+      await deleteApp(secondaryApp);
+
+      resetCreateForm();
+      setIsCreateModalOpen(false);
+      setMessage(
+        `Account created for ${cleanName}. Password setup email was sent.`
+      );
+
+      await refreshEverything();
+    } catch (error) {
+      console.error(error);
+      await signOut(secondaryAuth).catch(() => undefined);
+      await deleteApp(secondaryApp).catch(() => undefined);
+      setMessage(getFriendlyAuthError(error));
+    } finally {
+      setIsCreatingUser(false);
+    }
+  }
+
+  async function handleUpdateSelectedUserRole() {
+    if (!selectedUser || !canManageUsers() || isSavingUserAction) {
+      return;
+    }
+
+    if (isProtectedUser(selectedUser)) {
+      setMessage("This account is protected and cannot be changed here.");
+      return;
+    }
+
+    if (selectedUser.role === selectedUserRole) {
+      setMessage("No role change needed.");
+      return;
+    }
+
+    setIsSavingUserAction(true);
+    setMessage("Updating role...");
+
+    try {
+      await updateDoc(doc(db, "users", selectedUser.uid), {
+        role: selectedUserRole,
+        updatedAt: serverTimestamp(),
+        updatedAtText: new Date().toISOString(),
+        updatedBy: currentActor?.uid || "",
+        updatedByName: currentActor?.name || currentActor?.email || "",
+      });
+
+      await writeUserManagementLog({
+        actionType: "user.role_updated",
+        targetId: selectedUser.uid,
+        targetName: selectedUser.name,
+        description: `${currentActor?.name || "An owner"} changed ${selectedUser.name}'s role.`,
+        metadata: {
+          userName: selectedUser.name,
+          email: selectedUser.email,
+          previousRole: selectedUser.role,
+          newRole: selectedUserRole,
+          actionSource: "User Management",
+        },
+      });
+
+      setMessage("User role updated successfully.");
+      closeUserActionModal();
+      await refreshEverything();
+    } catch (error) {
+      console.error(error);
+      setMessage("Unable to update user role. Please try again.");
+    } finally {
+      setIsSavingUserAction(false);
+    }
+  }
+
+  async function handleToggleSelectedUserStatus() {
+    if (!selectedUser || !canManageUsers() || isSavingUserAction) {
+      return;
+    }
+
+    if (isProtectedUser(selectedUser)) {
+      setMessage("This account is protected and cannot be deactivated here.");
+      return;
+    }
+
+    const nextStatus = !selectedUser.isActive;
+
+    setIsSavingUserAction(true);
+    setMessage(nextStatus ? "Activating user..." : "Deactivating user...");
+
+    try {
+      await updateDoc(doc(db, "users", selectedUser.uid), {
+        isActive: nextStatus,
+        status: nextStatus ? "active" : "inactive",
+        updatedAt: serverTimestamp(),
+        updatedAtText: new Date().toISOString(),
+        updatedBy: currentActor?.uid || "",
+        updatedByName: currentActor?.name || currentActor?.email || "",
+      });
+
+      await writeUserManagementLog({
+        actionType: nextStatus ? "user.activated" : "user.deactivated",
+        targetId: selectedUser.uid,
+        targetName: selectedUser.name,
+        description: `${currentActor?.name || "An owner"} ${
+          nextStatus ? "activated" : "deactivated"
+        } ${selectedUser.name}.`,
+        metadata: {
+          userName: selectedUser.name,
+          email: selectedUser.email,
+          accountStatus: nextStatus ? "Active" : "Inactive",
+          actionSource: "User Management",
+        },
+      });
+
+      setMessage(
+        nextStatus
+          ? "User activated successfully."
+          : "User deactivated successfully. This user will be blocked on next login."
+      );
+      closeUserActionModal();
+      await refreshEverything();
+    } catch (error) {
+      console.error(error);
+      setMessage("Unable to update user status. Please try again.");
+    } finally {
+      setIsSavingUserAction(false);
+    }
+  }
+
+  async function handleSendPasswordReset(user: ManagedUser) {
+    if (!canManageUsers() || isSavingUserAction) {
+      return;
+    }
+
+    if (user.role === "developer" && currentActor?.role !== "developer") {
+      setMessage("Developer account password reset is protected.");
+      return;
+    }
+
+    setIsSavingUserAction(true);
+    setMessage("Sending password reset email...");
+
+    try {
+      await sendPasswordResetEmail(auth, user.email);
+
+      await writeUserManagementLog({
+        actionType: "user.password_reset_sent",
+        targetId: user.uid,
+        targetName: user.name,
+        description: `${currentActor?.name || "An owner"} sent a password reset email to ${user.name}.`,
+        metadata: {
+          userName: user.name,
+          email: user.email,
+          actionSource: "User Management",
+        },
+      });
+
+      setMessage(`Password reset email sent to ${user.email}.`);
+      await loadActivityLogs();
+    } catch (error) {
+      console.error(error);
+      setMessage("Could not send password reset email. Check the email address.");
+    } finally {
+      setIsSavingUserAction(false);
+    }
+  }
 
   const filteredUsers = useMemo(() => {
     const cleanSearchText = searchText.trim().toLowerCase();
@@ -533,13 +933,13 @@ function UserManagementPage() {
         .toLowerCase();
 
       const matchesSearch =
-      !cleanSearchText ||
-      activityLog.actorName.toLowerCase().includes(cleanSearchText) ||
-      activityLog.description.toLowerCase().includes(cleanSearchText) ||
-      activityLog.targetName.toLowerCase().includes(cleanSearchText) ||
-      activityLog.actionType.toLowerCase().includes(cleanSearchText) ||
-      getRoleLabel(activityLog.actorRole).toLowerCase().includes(cleanSearchText) ||
-      readableDetails.includes(cleanSearchText);
+        !cleanSearchText ||
+        activityLog.actorName.toLowerCase().includes(cleanSearchText) ||
+        activityLog.description.toLowerCase().includes(cleanSearchText) ||
+        activityLog.targetName.toLowerCase().includes(cleanSearchText) ||
+        activityLog.actionType.toLowerCase().includes(cleanSearchText) ||
+        getRoleLabel(activityLog.actorRole).toLowerCase().includes(cleanSearchText) ||
+        readableDetails.includes(cleanSearchText);
 
       const matchesAction =
         activityActionFilter === "all" ||
@@ -552,7 +952,6 @@ function UserManagementPage() {
   const userSummary = useMemo(() => {
     const activeUsers = users.filter((user) => user.isActive);
     const inactiveUsers = users.filter((user) => !user.isActive);
-    const developers = users.filter((user) => user.role === "developer");
     const owners = users.filter((user) => user.role === "owner");
     const staffUsers = users.filter((user) => user.role === "staff");
 
@@ -560,7 +959,6 @@ function UserManagementPage() {
       total: users.length,
       active: activeUsers.length,
       inactive: inactiveUsers.length,
-      developers: developers.length,
       owners: owners.length,
       staff: staffUsers.length,
     };
@@ -593,27 +991,38 @@ function UserManagementPage() {
           <p className="user-management-kicker">Access Control</p>
           <h2>User Management</h2>
           <p>
-            Review user accounts and system activity. Logs will become more useful
-            as POS, inventory, settings, and role changes are connected to the
-            activity log helper.
+            Create owner/staff accounts, manage access, send password setup emails,
+            and review system activity.
           </p>
         </div>
 
-        <button
-          className="user-management-refresh-button"
-          type="button"
-          onClick={() => {
-            if (activeTab === "users") {
-              loadUsers();
-              return;
-            }
+        <div className="user-management-header-actions">
+          {activeTab === "users" && canManageUsers() && (
+            <button
+              className="user-management-create-button"
+              type="button"
+              onClick={openCreateModal}
+            >
+              + Create Account
+            </button>
+          )}
 
-            loadActivityLogs();
-          }}
-          disabled={isLoading || isLoadingActivity}
-        >
-          {isLoading || isLoadingActivity ? "Refreshing..." : "Refresh"}
-        </button>
+          <button
+            className="user-management-refresh-button"
+            type="button"
+            onClick={() => {
+              if (activeTab === "users") {
+                loadUsers();
+                return;
+              }
+
+              loadActivityLogs();
+            }}
+            disabled={isLoading || isLoadingActivity}
+          >
+            {isLoading || isLoadingActivity ? "Refreshing..." : "Refresh"}
+          </button>
+        </div>
       </header>
 
       {message && <p className="user-management-message">{message}</p>}
@@ -654,7 +1063,7 @@ function UserManagementPage() {
             <article className="user-summary-card warning">
               <span>Inactive</span>
               <strong>{userSummary.inactive}</strong>
-              <p>Blocked or disabled accounts</p>
+              <p>Blocked inside the app</p>
             </article>
 
             <article className="user-summary-card">
@@ -756,6 +1165,27 @@ function UserManagementPage() {
                         <span>UID: {user.uid}</span>
                         <span>Created: {formatUserCreatedDate(user)}</span>
                       </div>
+
+                      {canManageUsers() && (
+                        <div className="user-card-actions">
+                          <button
+                            type="button"
+                            className="user-secondary-action"
+                            onClick={() => openUserActionModal(user)}
+                          >
+                            Manage
+                          </button>
+
+                          <button
+                            type="button"
+                            className="user-secondary-action"
+                            onClick={() => handleSendPasswordReset(user)}
+                            disabled={isSavingUserAction}
+                          >
+                            Send Reset Email
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </article>
                 ))
@@ -846,11 +1276,7 @@ function UserManagementPage() {
               ) : filteredActivityLogs.length === 0 ? (
                 <div className="user-empty-card">
                   <h4>No activity logs yet</h4>
-                  <p>
-                    This is normal for the first setup. Next, we will add a
-                    reusable activity log helper, then connect POS sales, voids,
-                    restocks, and settings changes.
-                  </p>
+                  <p>User actions, POS actions, settings changes, and inventory changes will appear here.</p>
                 </div>
               ) : (
                 filteredActivityLogs.map((activityLog) => (
@@ -909,15 +1335,206 @@ function UserManagementPage() {
         </>
       )}
 
-      <section className="user-management-next-card">
-        <strong>Next safe upgrade</strong>
-        <p>
-          After this Activity Logs viewer is confirmed working, we will create a
-          reusable activity log helper. Then we connect real actions like completed
-          sales, voided sales, inventory restocks, printer settings updates, and
-          user role changes.
-        </p>
-      </section>
+      {isCreateModalOpen && (
+        <div
+          className="user-modal-overlay"
+          onClick={() => {
+            if (!isCreatingUser) {
+              setIsCreateModalOpen(false);
+              resetCreateForm();
+            }
+          }}
+        >
+          <form
+            className="user-modal-card"
+            onSubmit={handleCreateUser}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="user-modal-header">
+              <div>
+                <p className="user-management-kicker">New Account</p>
+                <h3>Create Owner / Staff Account</h3>
+                <p>
+                  The user will receive a password setup email after the account is created.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="user-modal-close"
+                onClick={() => {
+                  if (!isCreatingUser) {
+                    setIsCreateModalOpen(false);
+                    resetCreateForm();
+                  }
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="user-form-grid">
+              <label>
+                <span>Full name</span>
+                <input
+                  value={newUserName}
+                  onChange={(event) => setNewUserName(event.target.value)}
+                  placeholder="Example: Juan Dela Cruz"
+                />
+              </label>
+
+              <label>
+                <span>Email address</span>
+                <input
+                  type="email"
+                  value={newUserEmail}
+                  onChange={(event) => setNewUserEmail(event.target.value)}
+                  placeholder="staff@email.com"
+                />
+              </label>
+
+              <label>
+                <span>Role</span>
+                <select
+                  value={newUserRole}
+                  onChange={(event) =>
+                    setNewUserRole(event.target.value as EditableUserRole)
+                  }
+                >
+                  <option value="staff">Staff Operator</option>
+                  <option value="owner">Owner</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="user-modal-note">
+              <strong>No developer role here.</strong>
+              <p>
+                Developer access is protected and cannot be created from this page.
+              </p>
+            </div>
+
+            <div className="user-modal-actions">
+              <button
+                type="submit"
+                className="user-primary-action"
+                disabled={isCreatingUser}
+              >
+                {isCreatingUser ? "Creating..." : "Create Account"}
+              </button>
+
+              <button
+                type="button"
+                className="user-secondary-action"
+                disabled={isCreatingUser}
+                onClick={() => {
+                  setIsCreateModalOpen(false);
+                  resetCreateForm();
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {selectedUser && (
+        <div
+          className="user-modal-overlay"
+          onClick={() => {
+            if (!isSavingUserAction) {
+              closeUserActionModal();
+            }
+          }}
+        >
+          <section
+            className="user-modal-card"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="user-modal-header">
+              <div>
+                <p className="user-management-kicker">Manage Account</p>
+                <h3>{selectedUser.name}</h3>
+                <p>{selectedUser.email}</p>
+              </div>
+
+              <button
+                type="button"
+                className="user-modal-close"
+                onClick={() => {
+                  if (!isSavingUserAction) {
+                    closeUserActionModal();
+                  }
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {isProtectedUser(selectedUser) ? (
+              <div className="user-modal-note warning">
+                <strong>Protected account</strong>
+                <p>
+                  Developer and your own account are protected from role changes or deactivation here.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="user-form-grid">
+                  <label>
+                    <span>Role</span>
+                    <select
+                      value={selectedUserRole}
+                      onChange={(event) =>
+                        setSelectedUserRole(event.target.value as EditableUserRole)
+                      }
+                    >
+                      <option value="staff">Staff Operator</option>
+                      <option value="owner">Owner</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div className="user-modal-note">
+                  <strong>Account status</strong>
+                  <p>
+                    Current status:{" "}
+                    <b>{selectedUser.isActive ? "Active" : "Inactive"}</b>.
+                    Inactive users are blocked on login.
+                  </p>
+                </div>
+
+                <div className="user-modal-actions">
+                  <button
+                    type="button"
+                    className="user-primary-action"
+                    disabled={isSavingUserAction}
+                    onClick={handleUpdateSelectedUserRole}
+                  >
+                    {isSavingUserAction
+                      ? "Saving..."
+                      : `Save Role as ${getEditableRoleLabel(selectedUserRole)}`}
+                  </button>
+
+                  <button
+                    type="button"
+                    className={
+                      selectedUser.isActive
+                        ? "user-danger-action"
+                        : "user-primary-action"
+                    }
+                    disabled={isSavingUserAction}
+                    onClick={handleToggleSelectedUserStatus}
+                  >
+                    {selectedUser.isActive ? "Deactivate User" : "Activate User"}
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
+        </div>
+      )}
     </section>
   );
 }

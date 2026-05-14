@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { collection, getDocs, query, where } from "firebase/firestore";
-import { db } from "../../firebase/config";
+import { db } from "../../firebase/config.ts";
 import type { ProductSize, Recipe } from "../../types/InventoryTypes";
 
 function RecipesPanel() {

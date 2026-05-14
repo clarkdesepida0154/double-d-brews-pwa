@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
-import { db } from "../../firebase/config";
+import { db } from "../../firebase/config.ts";
 
 type AuditSeverity = "critical" | "warning" | "info";
 

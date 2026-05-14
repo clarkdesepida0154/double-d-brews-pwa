@@ -631,3 +631,215 @@
     grid-template-columns: 1fr;
   }
 }
+
+.user-management-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.user-management-create-button,
+.user-primary-action,
+.user-secondary-action,
+.user-danger-action {
+  border: none;
+  border-radius: 999px;
+  padding: 11px 16px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 1000;
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+}
+
+.user-management-create-button,
+.user-primary-action {
+  background: linear-gradient(180deg, #8b5a2b, #5f3519);
+  color: #fffaf2;
+  box-shadow: 0 10px 20px rgba(92, 55, 31, 0.18);
+}
+
+.user-secondary-action {
+  background: #fffaf2;
+  color: #4b2b18;
+  border: 1px solid rgba(92, 55, 31, 0.18);
+}
+
+.user-danger-action {
+  background: linear-gradient(180deg, #b95042, #7e2d24);
+  color: #fffaf2;
+  box-shadow: 0 10px 20px rgba(126, 45, 36, 0.18);
+}
+
+.user-management-create-button:hover,
+.user-primary-action:hover,
+.user-secondary-action:hover,
+.user-danger-action:hover {
+  transform: translateY(-1px);
+}
+
+.user-management-create-button:disabled,
+.user-primary-action:disabled,
+.user-secondary-action:disabled,
+.user-danger-action:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.user-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.user-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1800;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(34, 18, 8, 0.58);
+  backdrop-filter: blur(8px);
+}
+
+.user-modal-card {
+  width: min(94vw, 560px);
+  max-height: 90vh;
+  overflow: auto;
+  border: 1px solid rgba(92, 55, 31, 0.16);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at top left, rgba(255, 244, 216, 0.9), transparent 36%),
+    #fffaf2;
+  box-shadow: 0 28px 80px rgba(35, 18, 8, 0.34);
+  padding: 22px;
+  color: #321d12;
+}
+
+.user-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.user-modal-header h3 {
+  margin: 3px 0 5px;
+  color: #321d12;
+  font-size: 22px;
+}
+
+.user-modal-header p {
+  margin: 0;
+  color: #76563b;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.user-modal-close {
+  border: none;
+  border-radius: 999px;
+  width: 38px;
+  height: 38px;
+  background: rgba(92, 55, 31, 0.1);
+  color: #4b2b18;
+  font-size: 24px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.user-form-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.user-form-grid label {
+  display: grid;
+  gap: 6px;
+}
+
+.user-form-grid span {
+  color: #5b351d;
+  font-size: 12px;
+  font-weight: 1000;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.user-form-grid input,
+.user-form-grid select {
+  width: 100%;
+  border: 1px solid rgba(92, 55, 31, 0.16);
+  border-radius: 16px;
+  background: #fffdf9;
+  color: #321d12;
+  padding: 12px 13px;
+  font: inherit;
+  font-weight: 850;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.user-form-grid input:focus,
+.user-form-grid select:focus {
+  border-color: rgba(92, 55, 31, 0.42);
+  box-shadow: 0 0 0 4px rgba(155, 106, 61, 0.12);
+}
+
+.user-modal-note {
+  margin-top: 14px;
+  border-radius: 18px;
+  background: rgba(255, 244, 216, 0.82);
+  border: 1px solid rgba(217, 144, 34, 0.18);
+  padding: 13px;
+}
+
+.user-modal-note.warning {
+  background: rgba(255, 231, 229, 0.92);
+  border-color: rgba(196, 73, 59, 0.2);
+}
+
+.user-modal-note strong {
+  color: #4b2b18;
+  font-weight: 1000;
+}
+
+.user-modal-note p {
+  margin: 5px 0 0;
+  color: #76563b;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.user-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+@media (max-width: 640px) {
+  .user-management-header-actions,
+  .user-card-actions,
+  .user-modal-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .user-management-create-button,
+  .user-primary-action,
+  .user-secondary-action,
+  .user-danger-action {
+    width: 100%;
+  }
+}

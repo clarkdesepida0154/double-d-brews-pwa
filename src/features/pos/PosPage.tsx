@@ -10,7 +10,7 @@ import {
   serverTimestamp,
   where,
 } from "firebase/firestore";
-import { db } from "../../firebase/config";
+import { db } from "../../firebase/config.ts";
 import type { UserProfile } from "../../types/UserProfile";
 import { writeActivityLog } from "../../utils/activityLogUtils";
 import "./PosPage.css";

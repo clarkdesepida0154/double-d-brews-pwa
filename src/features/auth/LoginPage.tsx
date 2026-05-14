@@ -1,7 +1,11 @@
 import { useState } from "react";
-import { sendPasswordResetEmail, signInWithEmailAndPassword } from "firebase/auth";
+import {
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+  signOut,
+} from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "../../firebase/config";
+import { auth, db } from "../../firebase/config.ts";
 import logo from "../../assets/double-d-brews-logo.png";
 import "./LoginPage.css";
 import type { UserProfile } from "../../types/UserProfile";
@@ -42,8 +46,9 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
 
       const userData = userDoc.data();
 
-      if (userData.isActive === false) {
-        showToast("This account is disabled. Please contact the owner.");
+      if (userData.isActive === false || String(userData.status || "").toLowerCase() === "inactive") {
+        await signOut(auth);
+        showToast("This account is inactive. Please contact the owner.");
         return;
       }
 

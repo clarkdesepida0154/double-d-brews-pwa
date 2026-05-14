@@ -1,5 +1,5 @@
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
-import { db } from "../firebase/config";
+import { db } from "../firebase/config.ts";
 import type { UserProfile } from "../types/UserProfile";
 
 type ActivityLogInput = {

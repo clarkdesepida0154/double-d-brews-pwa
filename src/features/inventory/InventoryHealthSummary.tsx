@@ -5,7 +5,7 @@ import {
   query,
   where,
 } from "firebase/firestore";
-import { db } from "../../firebase/config";
+import { db } from "../../firebase/config.ts";
 
 type HealthStats = {
   readyForPos: number;
