@@ -15,7 +15,7 @@ type LoginPageProps = {
 };
 
 function LoginPage({ onLoginSuccess }: LoginPageProps) {
-  const [email, setEmail] = useState("clarkdesepida0154@gmail.com");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [toastMessage, setToastMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -105,7 +105,7 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
               placeholder="Email address"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              autoComplete="email"
+              autoComplete="off"
             />
 
             <input
@@ -114,7 +114,7 @@ function LoginPage({ onLoginSuccess }: LoginPageProps) {
               placeholder="Password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              autoComplete="current-password"
+              autoComplete="off"
             />
 
             <button className="login-button" type="submit" disabled={isLoading}>
