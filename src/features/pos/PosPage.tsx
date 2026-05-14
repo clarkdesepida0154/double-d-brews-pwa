@@ -75,13 +75,30 @@ type PrinterSettings = {
   printerMode: "browser-preview" | "android-bluetooth";
 };
 
+type StoreReceiptSettings = {
+  storeName: string;
+  receiptSubtitle: string;
+  storeInfoLine: string;
+  thankYouMessage: string;
+  footerNote: string;
+};
+
 const PRINTER_SETTINGS_KEY = "double-d-brews-printer-settings";
+const STORE_RECEIPT_SETTINGS_KEY = "double-d-brews-store-receipt-settings";
 
 const defaultPrinterSettings: PrinterSettings = {
   paperSize: "58mm",
   receiptCopies: 1,
   autoPrintAfterSale: false,
   printerMode: "browser-preview",
+};
+
+const defaultStoreReceiptSettings: StoreReceiptSettings = {
+  storeName: "DOUBLE D'BREWS",
+  receiptSubtitle: "POS Sales Receipt",
+  storeInfoLine: "Thank you for supporting us",
+  thankYouMessage: "Thank you for ordering!",
+  footerNote: "Please come again.",
 };
 
 function loadSavedPrinterSettings(): PrinterSettings {
@@ -114,6 +131,41 @@ function loadSavedPrinterSettings(): PrinterSettings {
   } catch (error) {
     console.error(error);
     return defaultPrinterSettings;
+  }
+}
+
+function loadSavedStoreReceiptSettings(): StoreReceiptSettings {
+  try {
+    if (typeof window === "undefined") {
+      return defaultStoreReceiptSettings;
+    }
+
+    const savedSettings = window.localStorage.getItem(STORE_RECEIPT_SETTINGS_KEY);
+
+    if (!savedSettings) {
+      return defaultStoreReceiptSettings;
+    }
+
+    const parsedSettings = JSON.parse(savedSettings) as Partial<StoreReceiptSettings>;
+
+    return {
+      storeName:
+        parsedSettings.storeName?.trim() || defaultStoreReceiptSettings.storeName,
+      receiptSubtitle:
+        parsedSettings.receiptSubtitle?.trim() ||
+        defaultStoreReceiptSettings.receiptSubtitle,
+      storeInfoLine:
+        parsedSettings.storeInfoLine?.trim() ||
+        defaultStoreReceiptSettings.storeInfoLine,
+      thankYouMessage:
+        parsedSettings.thankYouMessage?.trim() ||
+        defaultStoreReceiptSettings.thankYouMessage,
+      footerNote:
+        parsedSettings.footerNote?.trim() || defaultStoreReceiptSettings.footerNote,
+    };
+  } catch (error) {
+    console.error(error);
+    return defaultStoreReceiptSettings;
   }
 }
 
@@ -207,6 +259,8 @@ function PosPage({ userProfile }: PosPageProps) {
   const [printerSettings, setPrinterSettings] = useState<PrinterSettings>(() =>
     loadSavedPrinterSettings()
   );
+  const [storeReceiptSettings, setStoreReceiptSettings] =
+    useState<StoreReceiptSettings>(() => loadSavedStoreReceiptSettings());
 
   const [saleToVoid, setSaleToVoid] = useState<SaleHistoryItem | null>(null);
   const [voidReason, setVoidReason] = useState<VoidReason | "">("")
@@ -361,6 +415,24 @@ const loadSellableProducts = useCallback(async () => {
     loadSellableProducts();
     loadSalesHistory();
   }, [loadSellableProducts, loadSalesHistory]);
+
+  useEffect(() => {
+  function refreshSavedSettings() {
+    setPrinterSettings(loadSavedPrinterSettings());
+    setStoreReceiptSettings(loadSavedStoreReceiptSettings());
+  }
+
+  refreshSavedSettings();
+
+  window.addEventListener("double-d-brews-settings-updated", refreshSavedSettings);
+
+  return () => {
+    window.removeEventListener(
+      "double-d-brews-settings-updated",
+      refreshSavedSettings
+    );
+  };
+}, []);
 
   useEffect(() => {
     return () => {
@@ -2165,6 +2237,13 @@ const newStock = previousStock - requirement.requiredAmount;
             </div>
 
             <div className="pos-printer-settings-note">
+              <span>Receipt Header</span>
+              <strong>
+                {storeReceiptSettings.storeName} • {storeReceiptSettings.receiptSubtitle}
+              </strong>
+            </div>
+
+            <div className="pos-printer-settings-note">
               <span>Printer Settings</span>
               <strong>
                 {printerSettings.paperSize} • {printerSettings.receiptCopies}{" "}
@@ -2232,9 +2311,11 @@ const newStock = previousStock - requirement.requiredAmount;
 
 {receiptForPrinting && (
   <div className="pos-thermal-receipt-print" aria-hidden="true">
-    <div className="thermal-store-name">DOUBLE D'BREWS</div>
-    <div className="thermal-store-subtitle">POS Sales Receipt</div>
-    <div className="thermal-store-info">Thank you for supporting us</div>
+    <div className="thermal-store-name">{storeReceiptSettings.storeName}</div>
+    <div className="thermal-store-subtitle">
+      {storeReceiptSettings.receiptSubtitle}
+    </div>
+    <div className="thermal-store-info">{storeReceiptSettings.storeInfoLine}</div>
 
     <div className="thermal-line" />
 
@@ -2254,7 +2335,7 @@ const newStock = previousStock - requirement.requiredAmount;
 
     <div className="thermal-meta-row">
       <span>Cashier:</span>
-      <strong>Clark</strong>
+      <strong>{userProfile.name || userProfile.email || "Cashier"}</strong>
     </div>
 
     <div className="thermal-line" />
@@ -2353,8 +2434,8 @@ const newStock = previousStock - requirement.requiredAmount;
     <div className="thermal-line" />
 
     <div className="thermal-footer">
-      <p>Thank you for ordering!</p>
-      <p>Please come again.</p>
+      <p>{storeReceiptSettings.thankYouMessage}</p>
+      <p>{storeReceiptSettings.footerNote}</p>
     </div>
   </div>
 )}

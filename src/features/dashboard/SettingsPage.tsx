@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { sendPasswordResetEmail } from "firebase/auth";
-import { auth } from "../../firebase/config.ts";
+import { auth } from "../../firebase/config";
 import type { UserProfile } from "../../types/UserProfile";
-import "./SettingsPage.css";
 import { writeActivityLog } from "../../utils/activityLogUtils";
+import "./SettingsPage.css";
 
 type SettingsPageProps = {
   userRole?: "developer" | "owner" | "staff";
-  userProfile: UserProfile;
+  userProfile?: UserProfile;
 };
 
 type PrinterPaperSize = "58mm" | "80mm";
@@ -19,13 +19,30 @@ type PrinterSettings = {
   printerMode: "browser-preview" | "android-bluetooth";
 };
 
+type StoreReceiptSettings = {
+  storeName: string;
+  receiptSubtitle: string;
+  storeInfoLine: string;
+  thankYouMessage: string;
+  footerNote: string;
+};
+
 const PRINTER_SETTINGS_KEY = "double-d-brews-printer-settings";
+const STORE_RECEIPT_SETTINGS_KEY = "double-d-brews-store-receipt-settings";
 
 const defaultPrinterSettings: PrinterSettings = {
   paperSize: "58mm",
   receiptCopies: 1,
   autoPrintAfterSale: false,
   printerMode: "browser-preview",
+};
+
+const defaultStoreReceiptSettings: StoreReceiptSettings = {
+  storeName: "DOUBLE D'BREWS",
+  receiptSubtitle: "POS Sales Receipt",
+  storeInfoLine: "Thank you for supporting us",
+  thankYouMessage: "Thank you for ordering!",
+  footerNote: "Please come again.",
 };
 
 function getSettingsRoleLabel(userRole: SettingsPageProps["userRole"]) {
@@ -69,15 +86,59 @@ function loadSavedPrinterSettings(): PrinterSettings {
   }
 }
 
+function loadSavedStoreReceiptSettings(): StoreReceiptSettings {
+  try {
+    const savedSettings = window.localStorage.getItem(STORE_RECEIPT_SETTINGS_KEY);
+
+    if (!savedSettings) {
+      return defaultStoreReceiptSettings;
+    }
+
+    const parsedSettings = JSON.parse(savedSettings) as Partial<StoreReceiptSettings>;
+
+    return {
+      storeName: parsedSettings.storeName?.trim() || defaultStoreReceiptSettings.storeName,
+      receiptSubtitle:
+        parsedSettings.receiptSubtitle?.trim() ||
+        defaultStoreReceiptSettings.receiptSubtitle,
+      storeInfoLine:
+        parsedSettings.storeInfoLine?.trim() ||
+        defaultStoreReceiptSettings.storeInfoLine,
+      thankYouMessage:
+        parsedSettings.thankYouMessage?.trim() ||
+        defaultStoreReceiptSettings.thankYouMessage,
+      footerNote:
+        parsedSettings.footerNote?.trim() || defaultStoreReceiptSettings.footerNote,
+    };
+  } catch (error) {
+    console.error(error);
+    return defaultStoreReceiptSettings;
+  }
+}
+
+function notifySettingsChanged() {
+  window.dispatchEvent(new Event("double-d-brews-settings-updated"));
+}
+
 function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [isStoreModalOpen, setIsStoreModalOpen] = useState(false);
   const [isPrinterModalOpen, setIsPrinterModalOpen] = useState(false);
+  const [isSystemModalOpen, setIsSystemModalOpen] = useState(false);
 
   const [accountMessage, setAccountMessage] = useState("");
   const [accountMessageType, setAccountMessageType] = useState<"success" | "error">(
     "success"
   );
   const [isSendingResetEmail, setIsSendingResetEmail] = useState(false);
+
+  const [storeSettings, setStoreSettings] = useState<StoreReceiptSettings>(
+    defaultStoreReceiptSettings
+  );
+  const [storeMessage, setStoreMessage] = useState("");
+  const [storeMessageType, setStoreMessageType] = useState<"success" | "error">(
+    "success"
+  );
 
   const [printerSettings, setPrinterSettings] = useState<PrinterSettings>(
     defaultPrinterSettings
@@ -91,14 +152,39 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
   const isStaffMode = userRole === "staff";
   const roleLabel = getSettingsRoleLabel(userRole);
 
+  const accountEmail = userProfile?.email || auth.currentUser?.email || "";
+  const accountName =
+    userProfile?.name || auth.currentUser?.displayName || accountEmail || "Current User";
+
   useEffect(() => {
     setPrinterSettings(loadSavedPrinterSettings());
+    setStoreSettings(loadSavedStoreReceiptSettings());
   }, []);
+
+  async function logSettingsAction(input: {
+    actionType: string;
+    targetName: string;
+    description: string;
+    metadata: Record<string, unknown>;
+  }) {
+    if (!userProfile) {
+      return;
+    }
+
+    await writeActivityLog({
+      actor: userProfile,
+      actionType: input.actionType,
+      targetId: userProfile.uid,
+      targetName: input.targetName,
+      description: input.description,
+      metadata: input.metadata,
+    });
+  }
 
   async function handleSendPasswordResetEmail() {
     setAccountMessage("");
 
-    if (!userProfile.email) {
+    if (!accountEmail) {
       setAccountMessageType("error");
       setAccountMessage("No email address was found for this account.");
       return;
@@ -107,26 +193,24 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
     setIsSendingResetEmail(true);
 
     try {
-      await sendPasswordResetEmail(auth, userProfile.email);
+      await sendPasswordResetEmail(auth, accountEmail);
 
-      await writeActivityLog({
-        actor: userProfile,
+      await logSettingsAction({
         actionType: "settings.account.password_reset_email_sent",
-        targetId: userProfile.uid,
-        targetName: userProfile.email,
-        description: `Password reset email was sent to ${userProfile.email}.`,
+        targetName: accountEmail,
+        description: `Password reset email was sent to ${accountEmail}.`,
         metadata: {
-          email: userProfile.email,
+          email: accountEmail,
+          actionSource: "Settings",
         },
       });
 
       setAccountMessageType("success");
       setAccountMessage(
-        `Password reset email sent to ${userProfile.email}. Please check the inbox or spam folder.`
+        `Password reset email sent to ${accountEmail}. Please check the inbox or spam folder.`
       );
     } catch (error) {
       console.error(error);
-
       setAccountMessageType("error");
       setAccountMessage(
         "Unable to send the password reset email right now. Please try again."
@@ -136,9 +220,10 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
     }
   }
 
-  function closeAccountModal() {
-    setIsAccountModalOpen(false);
-    setAccountMessage("");
+  function openStoreModal() {
+    setStoreSettings(loadSavedStoreReceiptSettings());
+    setStoreMessage("");
+    setIsStoreModalOpen(true);
   }
 
   function openPrinterModal() {
@@ -148,23 +233,63 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
     setIsPrinterModalOpen(true);
   }
 
-  function closePrinterModal() {
-    setIsPrinterModalOpen(false);
-    setPrinterMessage("");
-    setIsTestReceiptVisible(false);
+  async function handleSaveStoreSettings() {
+    const cleanedSettings: StoreReceiptSettings = {
+      storeName: storeSettings.storeName.trim() || defaultStoreReceiptSettings.storeName,
+      receiptSubtitle:
+        storeSettings.receiptSubtitle.trim() ||
+        defaultStoreReceiptSettings.receiptSubtitle,
+      storeInfoLine:
+        storeSettings.storeInfoLine.trim() || defaultStoreReceiptSettings.storeInfoLine,
+      thankYouMessage:
+        storeSettings.thankYouMessage.trim() ||
+        defaultStoreReceiptSettings.thankYouMessage,
+      footerNote: storeSettings.footerNote.trim() || defaultStoreReceiptSettings.footerNote,
+    };
+
+    try {
+      window.localStorage.setItem(
+        STORE_RECEIPT_SETTINGS_KEY,
+        JSON.stringify(cleanedSettings)
+      );
+
+      setStoreSettings(cleanedSettings);
+      notifySettingsChanged();
+
+      await logSettingsAction({
+        actionType: "settings.store_receipt.updated",
+        targetName: "Store Receipt Details",
+        description: "Store receipt details were updated.",
+        metadata: {
+          storeName: cleanedSettings.storeName,
+          receiptSubtitle: cleanedSettings.receiptSubtitle,
+          storeInfoLine: cleanedSettings.storeInfoLine,
+          thankYouMessage: cleanedSettings.thankYouMessage,
+          footerNote: cleanedSettings.footerNote,
+          actionSource: "Settings",
+        },
+      });
+
+      setStoreMessageType("success");
+      setStoreMessage("Store receipt details saved successfully.");
+    } catch (error) {
+      console.error(error);
+      setStoreMessageType("error");
+      setStoreMessage("Unable to save store receipt details. Please try again.");
+    }
   }
 
-  function handleSavePrinterSettings() {
+  async function handleSavePrinterSettings() {
     try {
       window.localStorage.setItem(
         PRINTER_SETTINGS_KEY,
         JSON.stringify(printerSettings)
       );
 
-      writeActivityLog({
-        actor: userProfile,
+      notifySettingsChanged();
+
+      await logSettingsAction({
         actionType: "settings.printer.updated",
-        targetId: userProfile.uid,
         targetName: "Thermal Receipt Printer",
         description: `Printer settings were updated to ${printerSettings.paperSize}, ${printerSettings.receiptCopies} ${
           printerSettings.receiptCopies === 1 ? "copy" : "copies"
@@ -176,6 +301,7 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
           receiptCopies: printerSettings.receiptCopies,
           autoPrintAfterSale: printerSettings.autoPrintAfterSale,
           printerMode: printerSettings.printerMode,
+          actionSource: "Settings",
         },
       });
 
@@ -183,7 +309,6 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
       setPrinterMessage("Printer preferences saved successfully on this device.");
     } catch (error) {
       console.error(error);
-
       setPrinterMessageType("error");
       setPrinterMessage(
         "Unable to save printer preferences on this device. Please try again."
@@ -199,8 +324,8 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
           <h2>Settings</h2>
           <p>
             {isStaffMode
-              ? "Manage your account and receipt printer connection for daily operations."
-              : "Manage account, store, receipt, printer, and system preferences."}
+              ? "Manage your account and receipt printer setup for daily operations."
+              : "Manage account access, receipt details, printer behavior, and system readiness."}
           </p>
         </div>
 
@@ -211,8 +336,8 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
         <section className="settings-access-note">
           <strong>Limited staff settings</strong>
           <p>
-            Staff operators can only access account and printer settings. Store,
-            receipt, and system controls are reserved for owners and developers.
+            Staff operators can access account and printer settings. Store and
+            system controls are reserved for owners.
           </p>
         </section>
       )}
@@ -225,15 +350,17 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
             <p className="settings-card-label">My Account</p>
             <h3>Account Settings</h3>
             <p>
-              View profile information and send a secure Firebase password reset
-              email to the account email address.
+              View account details and send a password reset email to the account email.
             </p>
           </div>
 
           <button
             className="settings-card-button active"
             type="button"
-            onClick={() => setIsAccountModalOpen(true)}
+            onClick={() => {
+              setAccountMessage("");
+              setIsAccountModalOpen(true);
+            }}
           >
             Open Account Settings
           </button>
@@ -244,10 +371,9 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
 
           <div>
             <p className="settings-card-label">Printer</p>
-            <h3>Thermal Receipt Printer</h3>
+            <h3>Receipt Printer</h3>
             <p>
-              Save receipt printer preferences for this device. Android Bluetooth
-              printing will use this setup later during the APK phase.
+              Save paper size, receipt copies, auto-print, and Android printer mode.
             </p>
           </div>
 
@@ -267,32 +393,18 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
 
               <div>
                 <p className="settings-card-label">Store</p>
-                <h3>Store Settings</h3>
+                <h3>Store Receipt Details</h3>
                 <p>
-                  Manage store identity, branch details, and business-level
-                  configuration.
+                  Set the store name, receipt subtitle, contact line, and footer message.
                 </p>
               </div>
 
-              <button className="settings-card-button" type="button" disabled>
-                Coming Soon
-              </button>
-            </article>
-
-            <article className="settings-card">
-              <div className="settings-card-icon">🧾</div>
-
-              <div>
-                <p className="settings-card-label">Receipts</p>
-                <h3>Receipt Settings</h3>
-                <p>
-                  Configure receipt header, footer, business details, and print
-                  formatting.
-                </p>
-              </div>
-
-              <button className="settings-card-button" type="button" disabled>
-                Coming Soon
+              <button
+                className="settings-card-button active"
+                type="button"
+                onClick={openStoreModal}
+              >
+                Open Store Settings
               </button>
             </article>
 
@@ -301,15 +413,18 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
 
               <div>
                 <p className="settings-card-label">System</p>
-                <h3>System Preferences</h3>
+                <h3>System Readiness</h3>
                 <p>
-                  Manage owner-level preferences, security behavior, and system
-                  controls.
+                  Check what is ready for Firebase Hosting, APK testing, and operation.
                 </p>
               </div>
 
-              <button className="settings-card-button" type="button" disabled>
-                Coming Soon
+              <button
+                className="settings-card-button active"
+                type="button"
+                onClick={() => setIsSystemModalOpen(true)}
+              >
+                View Readiness
               </button>
             </article>
           </>
@@ -317,8 +432,11 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
       </section>
 
       {isAccountModalOpen && (
-        <div className="settings-modal-overlay" onClick={closeAccountModal}>
-          <div
+        <div
+          className="settings-modal-overlay"
+          onClick={() => setIsAccountModalOpen(false)}
+        >
+          <section
             className="settings-modal"
             onClick={(event) => event.stopPropagation()}
           >
@@ -326,14 +444,13 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
               <div>
                 <p className="settings-kicker">My Account</p>
                 <h3>Account Settings</h3>
-                <p>Review the current signed-in account details.</p>
+                <p>View your account information and send a password reset email.</p>
               </div>
 
               <button
                 className="settings-modal-close"
                 type="button"
-                onClick={closeAccountModal}
-                aria-label="Close account settings"
+                onClick={() => setIsAccountModalOpen(false)}
               >
                 ×
               </button>
@@ -342,12 +459,12 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
             <div className="settings-account-details">
               <div>
                 <span>Name</span>
-                <strong>{userProfile.name || "No name saved"}</strong>
+                <strong>{accountName}</strong>
               </div>
 
               <div>
                 <span>Email</span>
-                <strong>{userProfile.email || "No email saved"}</strong>
+                <strong>{accountEmail || "No email saved"}</strong>
               </div>
 
               <div>
@@ -357,7 +474,7 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
 
               <div>
                 <span>Account Status</span>
-                <strong>{userProfile.isActive ? "Active" : "Inactive"}</strong>
+                <strong>{userProfile?.isActive === false ? "Inactive" : "Active"}</strong>
               </div>
             </div>
 
@@ -374,44 +491,178 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
                 onClick={handleSendPasswordResetEmail}
                 disabled={isSendingResetEmail}
               >
-                {isSendingResetEmail
-                  ? "Sending..."
-                  : "Send Password Reset Email"}
+                {isSendingResetEmail ? "Sending..." : "Send Password Reset Email"}
               </button>
 
               <button
                 className="settings-secondary-button"
                 type="button"
-                onClick={closeAccountModal}
+                onClick={() => setIsAccountModalOpen(false)}
               >
                 Close
               </button>
             </div>
-          </div>
+          </section>
+        </div>
+      )}
+
+      {isStoreModalOpen && (
+        <div
+          className="settings-modal-overlay"
+          onClick={() => setIsStoreModalOpen(false)}
+        >
+          <section
+            className="settings-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="settings-modal-header">
+              <div>
+                <p className="settings-kicker">Store Receipt Details</p>
+                <h3>Store Settings</h3>
+                <p>These details will be used on printed receipts.</p>
+              </div>
+
+              <button
+                className="settings-modal-close"
+                type="button"
+                onClick={() => setIsStoreModalOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="settings-form-grid">
+              <label>
+                <span>Store name</span>
+                <input
+                  value={storeSettings.storeName}
+                  onChange={(event) =>
+                    setStoreSettings((currentSettings) => ({
+                      ...currentSettings,
+                      storeName: event.target.value,
+                    }))
+                  }
+                  placeholder="DOUBLE D'BREWS"
+                />
+              </label>
+
+              <label>
+                <span>Receipt subtitle</span>
+                <input
+                  value={storeSettings.receiptSubtitle}
+                  onChange={(event) =>
+                    setStoreSettings((currentSettings) => ({
+                      ...currentSettings,
+                      receiptSubtitle: event.target.value,
+                    }))
+                  }
+                  placeholder="POS Sales Receipt"
+                />
+              </label>
+
+              <label>
+                <span>Store info / contact line</span>
+                <input
+                  value={storeSettings.storeInfoLine}
+                  onChange={(event) =>
+                    setStoreSettings((currentSettings) => ({
+                      ...currentSettings,
+                      storeInfoLine: event.target.value,
+                    }))
+                  }
+                  placeholder="Address, contact number, or short note"
+                />
+              </label>
+
+              <label>
+                <span>Thank-you message</span>
+                <input
+                  value={storeSettings.thankYouMessage}
+                  onChange={(event) =>
+                    setStoreSettings((currentSettings) => ({
+                      ...currentSettings,
+                      thankYouMessage: event.target.value,
+                    }))
+                  }
+                  placeholder="Thank you for ordering!"
+                />
+              </label>
+
+              <label>
+                <span>Footer note</span>
+                <input
+                  value={storeSettings.footerNote}
+                  onChange={(event) =>
+                    setStoreSettings((currentSettings) => ({
+                      ...currentSettings,
+                      footerNote: event.target.value,
+                    }))
+                  }
+                  placeholder="Please come again."
+                />
+              </label>
+            </div>
+
+            <section className="settings-preview-card">
+              <span>Receipt Preview</span>
+              <strong>{storeSettings.storeName || defaultStoreReceiptSettings.storeName}</strong>
+              <p>{storeSettings.receiptSubtitle || defaultStoreReceiptSettings.receiptSubtitle}</p>
+              <p>{storeSettings.storeInfoLine || defaultStoreReceiptSettings.storeInfoLine}</p>
+              <div className="settings-preview-line" />
+              <p>{storeSettings.thankYouMessage || defaultStoreReceiptSettings.thankYouMessage}</p>
+              <p>{storeSettings.footerNote || defaultStoreReceiptSettings.footerNote}</p>
+            </section>
+
+            {storeMessage && (
+              <p className={`settings-account-message ${storeMessageType}`}>
+                {storeMessage}
+              </p>
+            )}
+
+            <div className="settings-modal-actions">
+              <button
+                className="settings-primary-button"
+                type="button"
+                onClick={handleSaveStoreSettings}
+              >
+                Save Store Settings
+              </button>
+
+              <button
+                className="settings-secondary-button"
+                type="button"
+                onClick={() => setIsStoreModalOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+          </section>
         </div>
       )}
 
       {isPrinterModalOpen && (
-        <div className="settings-modal-overlay" onClick={closePrinterModal}>
-          <div
+        <div
+          className="settings-modal-overlay"
+          onClick={() => setIsPrinterModalOpen(false)}
+        >
+          <section
             className="settings-modal printer-settings-modal"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="settings-modal-header">
               <div>
                 <p className="settings-kicker">Printer Setup</p>
-                <h3>Thermal Receipt Printer</h3>
+                <h3>Receipt Printer Settings</h3>
                 <p>
-                  Set receipt paper and print behavior for this device. Bluetooth
-                  connection will be added during the Android APK phase.
+                  Save receipt paper and print behavior for this device. Real Bluetooth
+                  printing will still need APK + printer testing.
                 </p>
               </div>
 
               <button
                 className="settings-modal-close"
                 type="button"
-                onClick={closePrinterModal}
-                aria-label="Close printer settings"
+                onClick={() => setIsPrinterModalOpen(false)}
               >
                 ×
               </button>
@@ -450,6 +701,22 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
                 </select>
               </label>
 
+              <label className="printer-setting-field">
+                <span>Printer Mode</span>
+                <select
+                  value={printerSettings.printerMode}
+                  onChange={(event) =>
+                    setPrinterSettings((currentSettings) => ({
+                      ...currentSettings,
+                      printerMode: event.target.value as PrinterSettings["printerMode"],
+                    }))
+                  }
+                >
+                  <option value="browser-preview">Browser Print Preview</option>
+                  <option value="android-bluetooth">Android Bluetooth Ready</option>
+                </select>
+              </label>
+
               <label className="printer-toggle-card">
                 <input
                   type="checkbox"
@@ -461,37 +728,20 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
                     }))
                   }
                 />
-
                 <span>
                   <strong>Auto-print after sale</strong>
                   <small>
-                    After POS is connected to printer settings, completed sales can
-                    automatically trigger receipt printing.
+                    After completing a sale, the receipt print flow will start automatically.
                   </small>
                 </span>
               </label>
-
-              <div className="printer-mode-card">
-                <span>Printer Mode</span>
-                <strong>
-                  {printerSettings.printerMode === "browser-preview"
-                    ? "Browser Preview"
-                    : "Android Bluetooth"}
-                </strong>
-                <p>
-                  Browser Preview is active during development. Android Bluetooth
-                  mode will be enabled after Capacitor APK setup and real printer
-                  testing.
-                </p>
-              </div>
             </section>
 
             <section className="printer-apk-note">
-              <strong>APK-ready plan</strong>
+              <strong>Mobile thermal printer note</strong>
               <p>
-                For the Android app, the printer should use native ESC/POS Bluetooth
-                printing. That will print only the receipt content, feed a small
-                ending space, then stop for tearing or cutting.
+                Browser print preview can work on web/PWA. Direct Bluetooth thermal
+                printing on APK needs real Android testing with the actual printer.
               </p>
             </section>
 
@@ -504,18 +754,23 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
             {isTestReceiptVisible && (
               <section className="printer-test-receipt-card">
                 <div className="printer-test-receipt">
-                  <h4>DOUBLE D&apos;BREWS</h4>
-                  <p>Printer Test Receipt</p>
-                  <div className="printer-test-line"></div>
+                  <strong>{storeSettings.storeName}</strong>
+                  <p>{storeSettings.receiptSubtitle}</p>
+                  <div className="printer-test-line" />
                   <p>Paper: {printerSettings.paperSize}</p>
                   <p>Copies: {printerSettings.receiptCopies}</p>
                   <p>
-                    Auto Print:{" "}
+                    Auto-print:{" "}
                     {printerSettings.autoPrintAfterSale ? "Enabled" : "Disabled"}
                   </p>
-                  <div className="printer-test-line"></div>
+                  <p>
+                    Mode:{" "}
+                    {printerSettings.printerMode === "android-bluetooth"
+                      ? "Android Bluetooth Ready"
+                      : "Browser Print Preview"}
+                  </p>
+                  <div className="printer-test-line" />
                   <strong>Printer settings are ready.</strong>
-                  <p>Please test real Bluetooth printing during APK setup.</p>
                 </div>
               </section>
             )}
@@ -540,12 +795,72 @@ function SettingsPage({ userRole = "owner", userProfile }: SettingsPageProps) {
               <button
                 className="settings-secondary-button"
                 type="button"
-                onClick={closePrinterModal}
+                onClick={() => setIsPrinterModalOpen(false)}
               >
                 Close
               </button>
             </div>
-          </div>
+          </section>
+        </div>
+      )}
+
+      {isSystemModalOpen && (
+        <div
+          className="settings-modal-overlay"
+          onClick={() => setIsSystemModalOpen(false)}
+        >
+          <section
+            className="settings-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="settings-modal-header">
+              <div>
+                <p className="settings-kicker">System Readiness</p>
+                <h3>Deployment Checklist</h3>
+                <p>This keeps the owner aware of what is ready before operation.</p>
+              </div>
+
+              <button
+                className="settings-modal-close"
+                type="button"
+                onClick={() => setIsSystemModalOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="settings-readiness-list">
+              <article>
+                <strong>Firebase Hosting</strong>
+                <span>Ready after final build test</span>
+              </article>
+
+              <article>
+                <strong>User Management</strong>
+                <span>Owner/Staff creation works on the no-cost setup</span>
+              </article>
+
+              <article>
+                <strong>Receipt Printing</strong>
+                <span>Browser print ready; APK Bluetooth needs real printer test</span>
+              </article>
+
+              <article>
+                <strong>Capacitor APK</strong>
+                <span>Prepare after web deployment works</span>
+              </article>
+            </div>
+
+            <div className="settings-modal-actions">
+              <button
+                className="settings-secondary-button"
+                type="button"
+                onClick={() => setIsSystemModalOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+          </section>
         </div>
       )}
     </section>

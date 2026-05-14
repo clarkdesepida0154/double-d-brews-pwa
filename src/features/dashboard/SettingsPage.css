@@ -866,3 +866,335 @@
     display: grid;
   }
 }
+
+/* =========================
+   Final Settings MVP
+========================= */
+
+.settings-card-button.active {
+  cursor: pointer;
+  opacity: 1;
+  background: linear-gradient(135deg, #8b4f2a 0%, #5c371f 100%);
+  color: #fffaf2;
+  border-color: rgba(92, 55, 31, 0.28);
+  box-shadow: 0 10px 22px rgba(92, 55, 31, 0.16);
+}
+
+.settings-card-button.active:hover {
+  transform: translateY(-1px);
+}
+
+.settings-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1800;
+  display: grid;
+  place-items: center;
+  background: rgba(50, 29, 18, 0.48);
+  backdrop-filter: blur(8px);
+  padding: 18px;
+}
+
+.settings-modal {
+  width: min(620px, 100%);
+  max-height: 88vh;
+  overflow: auto;
+  border: 1px solid rgba(92, 55, 31, 0.14);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at top right, rgba(233, 190, 128, 0.26), transparent 34%),
+    linear-gradient(180deg, #fffdf9 0%, #fff3df 100%);
+  box-shadow: 0 26px 60px rgba(50, 29, 18, 0.24);
+  padding: 20px;
+}
+
+.settings-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.settings-modal-header h3 {
+  margin: 0;
+  color: #321d12;
+  font-size: 24px;
+  font-weight: 1000;
+  line-height: 1.12;
+}
+
+.settings-modal-header p {
+  margin: 7px 0 0;
+  color: #76563b;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.settings-modal-close {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border: 1px solid rgba(92, 55, 31, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 250, 242, 0.9);
+  color: #4a2c1a;
+  font-size: 24px;
+  font-weight: 1000;
+  cursor: pointer;
+}
+
+.settings-account-details {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.settings-account-details div {
+  border: 1px solid rgba(92, 55, 31, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 250, 242, 0.78);
+  padding: 13px;
+}
+
+.settings-account-details span,
+.settings-form-grid span,
+.printer-setting-field span {
+  display: block;
+  color: #9b6a3d;
+  font-size: 11px;
+  font-weight: 1000;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.settings-account-details strong {
+  display: block;
+  margin-top: 4px;
+  color: #321d12;
+  font-weight: 1000;
+}
+
+.settings-account-message {
+  border-radius: 16px;
+  margin: 14px 0 0;
+  padding: 12px;
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.4;
+}
+
+.settings-account-message.success {
+  background: rgba(226, 245, 229, 0.95);
+  color: #286a36;
+  border: 1px solid rgba(40, 106, 54, 0.18);
+}
+
+.settings-account-message.error {
+  background: rgba(255, 231, 229, 0.95);
+  color: #9c3328;
+  border: 1px solid rgba(156, 51, 40, 0.18);
+}
+
+.settings-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.settings-primary-button,
+.settings-secondary-button {
+  border-radius: 999px;
+  padding: 11px 16px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 1000;
+  cursor: pointer;
+}
+
+.settings-primary-button {
+  border: none;
+  background: linear-gradient(135deg, #8b4f2a 0%, #5c371f 100%);
+  color: #fffaf2;
+  box-shadow: 0 10px 22px rgba(92, 55, 31, 0.16);
+}
+
+.settings-secondary-button {
+  border: 1px solid rgba(92, 55, 31, 0.16);
+  background: #fffaf2;
+  color: #4a2c1a;
+}
+
+.settings-primary-button:disabled,
+.settings-secondary-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.settings-form-grid,
+.printer-settings-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-form-grid label,
+.printer-setting-field {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-form-grid input,
+.printer-setting-field select {
+  width: 100%;
+  border: 1px solid rgba(92, 55, 31, 0.16);
+  border-radius: 16px;
+  background: #fffdf9;
+  color: #321d12;
+  padding: 12px 13px;
+  font: inherit;
+  font-weight: 850;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.settings-form-grid input:focus,
+.printer-setting-field select:focus {
+  border-color: rgba(92, 55, 31, 0.42);
+  box-shadow: 0 0 0 4px rgba(155, 106, 61, 0.12);
+}
+
+.settings-preview-card,
+.printer-apk-note,
+.printer-test-receipt-card {
+  margin-top: 14px;
+  border: 1px solid rgba(92, 55, 31, 0.12);
+  border-radius: 20px;
+  background: rgba(255, 250, 242, 0.84);
+  padding: 14px;
+}
+
+.settings-preview-card span {
+  display: block;
+  color: #9b6a3d;
+  font-size: 11px;
+  font-weight: 1000;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.settings-preview-card strong {
+  display: block;
+  margin-top: 6px;
+  color: #321d12;
+  font-size: 18px;
+  font-weight: 1000;
+}
+
+.settings-preview-card p,
+.printer-apk-note p {
+  margin: 5px 0 0;
+  color: #76563b;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.settings-preview-line,
+.printer-test-line {
+  height: 1px;
+  background: rgba(92, 55, 31, 0.2);
+  margin: 10px 0;
+}
+
+.printer-toggle-card {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  border: 1px solid rgba(92, 55, 31, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 250, 242, 0.82);
+  padding: 13px;
+}
+
+.printer-toggle-card input {
+  margin-top: 4px;
+}
+
+.printer-toggle-card strong {
+  display: block;
+  color: #321d12;
+  font-weight: 1000;
+}
+
+.printer-toggle-card small {
+  display: block;
+  margin-top: 4px;
+  color: #76563b;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.printer-apk-note strong {
+  color: #321d12;
+  font-weight: 1000;
+}
+
+.printer-test-receipt {
+  width: 230px;
+  max-width: 100%;
+  margin: 0 auto;
+  border-radius: 10px;
+  background: #fff;
+  color: #111;
+  padding: 12px;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+}
+
+.printer-test-receipt p {
+  margin: 4px 0;
+}
+
+.settings-readiness-list {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-readiness-list article {
+  border: 1px solid rgba(92, 55, 31, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 250, 242, 0.82);
+  padding: 13px;
+}
+
+.settings-readiness-list strong {
+  display: block;
+  color: #321d12;
+  font-weight: 1000;
+}
+
+.settings-readiness-list span {
+  display: block;
+  margin-top: 4px;
+  color: #76563b;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+@media (max-width: 640px) {
+  .settings-modal-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-primary-button,
+  .settings-secondary-button {
+    width: 100%;
+  }
+}
