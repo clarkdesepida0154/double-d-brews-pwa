@@ -16,3 +16,58 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
 }
+
+/* =========================
+   App Session Loading
+========================= */
+
+.app-loading-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 12%, rgba(255, 213, 164, 0.18), transparent 28%),
+    linear-gradient(135deg, #2b1203 0%, #3a1704 45%, #1c0901 100%);
+  color: #fff8ef;
+  padding: 24px;
+}
+
+.app-loading-card {
+  width: min(92vw, 420px);
+  border: 1px solid rgba(255, 237, 214, 0.16);
+  border-radius: 28px;
+  background: rgba(82, 62, 46, 0.92);
+  box-shadow: 0 28px 65px rgba(0, 0, 0, 0.34);
+  padding: 28px;
+  text-align: center;
+}
+
+.app-loading-card h1 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 1000;
+}
+
+.app-loading-card p {
+  margin: 10px 0 0;
+  color: #fff3e5;
+  font-weight: 800;
+}
+
+.app-session-message {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  z-index: 9999;
+  width: min(92vw, 460px);
+  transform: translateX(-50%);
+  border: 1px solid rgba(228, 164, 95, 0.45);
+  border-radius: 18px;
+  background: #fff7ed;
+  color: #351503;
+  padding: 14px 18px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 900;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+}
