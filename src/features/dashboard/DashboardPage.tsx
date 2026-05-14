@@ -489,7 +489,17 @@ async function handleConfirmLogout() {
           </nav>
         </div>
 
-        <span className="dashboard-user-name">{userProfile.name}</span>
+        <div className="dashboard-header-user-actions">
+  <span className="dashboard-user-name">{userProfile.name}</span>
+
+  <button
+    className="dashboard-header-logout-button"
+    type="button"
+    onClick={requestLogout}
+  >
+    Logout
+  </button>
+</div>
       </header>
 
       <section className="dashboard-content">

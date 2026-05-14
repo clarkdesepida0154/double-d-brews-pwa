@@ -687,3 +687,36 @@
     width: 100%;
   }
 }
+
+/* =========================
+   Desktop Header Logout
+========================= */
+
+.dashboard-header-user-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dashboard-header-logout-button {
+  border: 1px solid rgba(92, 55, 31, 0.16);
+  border-radius: 999px;
+  background: #fffaf2;
+  color: #4b2b18;
+  padding: 9px 13px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 1000;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(92, 55, 31, 0.08);
+}
+
+.dashboard-header-logout-button:hover {
+  background: #f4e7d3;
+}
+
+@media (max-width: 820px) {
+  .dashboard-header-logout-button {
+    display: none;
+  }
+}
